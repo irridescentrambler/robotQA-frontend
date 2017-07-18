@@ -23,24 +23,37 @@ interface Robot {
 
 interface MyState {
   has_records: boolean,
-  robots: Array<Robot>,
+  extinguish: Array<Robot>,
   fetching: boolean
 }
 
-class Stage1Robots extends React.Component<any, MyState>{
+interface MyProps {
+  extinguish: Robot[]
+}
+
+class Stage1Robots extends React.Component<MyProps, MyState>{
   constructor(props: any){
     super(props);
     this.state = {
       has_records: false,
-      robots: [],
+      extinguish: this.props.extinguish,
       fetching: false
     }
-    store.subscribe(() => {
+  }
+
+  componentWillReceiveProps(nextProps: MyProps){
+    if(nextProps.extinguish.length > 0){
       this.setState({
-        robots: store.getState().extinguish,
-        has_records: true
-      });
-    });
+        has_records: true,
+        extinguish: nextProps.extinguish
+      })
+    }
+    else{
+      this.setState({
+        has_records: false,
+        extinguish: []
+      })
+    }
   }
 
   render(){
@@ -67,7 +80,7 @@ class Stage1Robots extends React.Component<any, MyState>{
                     <th>Color</th>
                   </tr>
                 </thead>
-                <RobotRecord robots = { this.state.robots } />
+                <RobotRecord robots = { this.state.extinguish } />
               </Table>
             </Col>
           </Row>

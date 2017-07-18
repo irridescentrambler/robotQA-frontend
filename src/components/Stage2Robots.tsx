@@ -23,24 +23,37 @@ interface Robot {
 
 interface MyState {
   has_records: boolean,
-  robots: Array<Robot>,
+  recycle: Robot[],
   fetching: boolean
 }
 
-class Stage2Robots extends React.Component<{ robots?: Robot[] }, MyState>{
-  constructor(props: any){
+interface MyProps {
+  recycle: Robot[]
+}
+
+class Stage2Robots extends React.Component<MyProps, MyState>{
+  constructor(props: MyProps){
     super(props);
     this.state = {
       has_records: false,
-      robots: [],
+      recycle: this.props.recycle,
       fetching: false
     }
-    store.subscribe(() => {
+  }
+
+  componentWillReceiveProps(nextProps: MyProps){
+    if(nextProps.recycle.length > 0){
       this.setState({
-        robots: store.getState().recycle,
-        has_records: true
-      });
-    });
+        has_records: true,
+        recycle: nextProps.recycle
+      })
+    }
+    else{
+      this.setState({
+        has_records: false,
+        recycle: []
+      })
+    }
   }
 
   render(){
@@ -67,7 +80,7 @@ class Stage2Robots extends React.Component<{ robots?: Robot[] }, MyState>{
                     <th>Color</th>
                   </tr>
                 </thead>
-                <RobotRecord robots = { this.state.robots } />
+                <RobotRecord robots = { this.state.recycle } />
               </Table>
             </Col>
           </Row>

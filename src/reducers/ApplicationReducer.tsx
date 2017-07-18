@@ -39,9 +39,9 @@ const reducer = function(state: MyState = { }, action: Action):MyState {
       console.log("DISPLAY ROBOTS called");
       return action.payload
     }
-    case 'PERFORM_QA': {
-      console.log("PERFORM QA called");
-      return changedState;
+    case 'SHIP_ORDER': {
+      console.log("SHIP ORDER called");
+      
     }
   }
 }

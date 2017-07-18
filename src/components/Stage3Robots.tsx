@@ -23,24 +23,37 @@ interface Robot {
 
 interface MyState {
   has_records: boolean,
-  robots: Array<Robot>,
+  factory_second: Robot[],
   fetching: boolean
 }
 
-class Stage3Robots extends React.Component<{ robots?: Robot[] }, MyState>{
-  constructor(props: any){
+interface MyProps {
+  factory_second: Robot[]
+}
+
+class Stage3Robots extends React.Component<MyProps, MyState>{
+  constructor(props: MyProps){
     super(props);
     this.state = {
       has_records: false,
-      robots: [],
+      factory_second: this.props.factory_second,
       fetching: false
     }
-    store.subscribe(() => {
+  }
+
+  componentWillReceiveProps(nextProps: MyProps){
+    if(nextProps.factory_second.length > 0){
       this.setState({
-        robots: store.getState().factory_second,
-        has_records: true
-      });
-    });
+        has_records: true,
+        factory_second: nextProps.factory_second
+      })
+    }
+    else{
+      this.setState({
+        has_records: false,
+        factory_second: []
+      })
+    }
   }
 
   render(){
@@ -67,7 +80,7 @@ class Stage3Robots extends React.Component<{ robots?: Robot[] }, MyState>{
                     <th>Color</th>
                   </tr>
                 </thead>
-                <RobotRecord robots = { this.state.robots } />
+                <RobotRecord robots = { this.state.factory_second } />
               </Table>
             </Col>
           </Row>

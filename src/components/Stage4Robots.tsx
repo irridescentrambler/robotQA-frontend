@@ -4,7 +4,7 @@ import { Table } from 'reactstrap';
 import 'bootstrap/dist/css/bootstrap.css';
 import { Button } from 'reactstrap';
 import '../../style/home.css';
-import RobotRecord from "./RobotRecord";
+import ShipmentRobots from "./ShipmentRobots";
 import store from "../stores/ApplicationStore";
 
 interface Robot {
@@ -23,24 +23,37 @@ interface Robot {
 
 interface MyState {
   has_records: boolean,
-  robots: Array<Robot>,
+  ship: Robot[],
   fetching: boolean
 }
 
-class Stage4Robots extends React.Component<any, MyState>{
-  constructor(props: any){
+interface MyProps {
+  ship: Robot[]
+}
+
+class Stage4Robots extends React.Component<MyProps, MyState>{
+  constructor(props: MyProps){
     super(props);
     this.state = {
       has_records: false,
-      robots: [],
+      ship: this.props.ship,
       fetching: false
     }
-    store.subscribe(() => {
+  }
+
+  componentWillReceiveProps(nextProps: MyProps){
+    if(nextProps.ship.length > 0){
       this.setState({
-        robots: store.getState().ship,
-        has_records: true
-      });
-    });
+        has_records: true,
+        ship: nextProps.ship
+      })
+    }
+    else{
+      this.setState({
+        has_records: false,
+        ship: []
+      })
+    }
   }
 
   render(){
@@ -67,7 +80,7 @@ class Stage4Robots extends React.Component<any, MyState>{
                     <th>Color</th>
                   </tr>
                 </thead>
-                <RobotRecord robots = { this.state.robots } />
+                <ShipmentRobots robots = { this.state.ship } />
               </Table>
             </Col>
           </Row>

@@ -34,3 +34,8 @@ export var fetchRobots = function():MyState {
   });
   return changedState;
 }
+
+export var shipOrder = function(): MyState {
+  var changedState: MyState = {}
+  return changedState;
+}

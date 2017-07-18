@@ -25,17 +25,11 @@ interface MyState {
   extinguish: Robot[],
   recycle: Robot[],
   factory_second: Robot[],
-  ship: Robot[],
-  records_available?: false,
-  records_fetching?: false
+  ship: Robot[]
 }
 
-interface MyProps {
-
-}
-
-class RobotQA extends React.Component<MyProps, MyState>{
-  constructor(props: MyProps){
+class RobotQA extends React.Component<any, MyState>{
+  constructor(props: any){
     super(props);
     this.fetchRobots = this.fetchRobots.bind(this);
     this.state = {
@@ -47,6 +41,7 @@ class RobotQA extends React.Component<MyProps, MyState>{
     store.subscribe(() => {
       this.setState(store.getState());
     });
+    store.dispatch({ type: "FETCH_ROBOTS" });
   }
 
   fetchRobots(){
@@ -58,27 +53,22 @@ class RobotQA extends React.Component<MyProps, MyState>{
         <Container className="qa-table">
           <Row>
             <Col>
-              <Button onClick = { this.fetchRobots } color="primary">Fetch</Button>
+              <Stage1Robots extinguish = { this.state.extinguish }/>
             </Col>
           </Row>
           <Row>
             <Col>
-              <Stage1Robots/>
+              <Stage2Robots recycle = { this.state.recycle }/>
             </Col>
           </Row>
           <Row>
             <Col>
-              <Stage2Robots/>
+              <Stage3Robots factory_second = { this.state.factory_second }/>
             </Col>
           </Row>
           <Row>
             <Col>
-              <Stage3Robots/>
-            </Col>
-          </Row>
-          <Row>
-            <Col>
-              <Stage4Robots/>
+              <Stage4Robots ship = { this.state.ship }/>
             </Col>
           </Row>
         </Container>
