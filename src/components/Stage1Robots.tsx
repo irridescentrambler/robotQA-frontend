@@ -4,7 +4,7 @@ import { Table } from 'reactstrap';
 import 'bootstrap/dist/css/bootstrap.css';
 import { Button } from 'reactstrap';
 import '../../style/home.css';
-import RobotRecord from "./RobotRecord";
+import ExtinguishRobotRecord from "./ExtinguishRobotRecord";
 import store from "../stores/ApplicationStore";
 
 interface Robot {
@@ -18,7 +18,9 @@ interface Robot {
   on_fire: boolean,
   rusty: boolean,
   loose_screws: boolean,
-  paint_scratched: boolean
+  paint_scratched: boolean,
+  is_extinguished: boolean,
+  is_shipped: boolean
 }
 
 interface MyState {
@@ -80,7 +82,7 @@ class Stage1Robots extends React.Component<MyProps, MyState>{
                     <th>Color</th>
                   </tr>
                 </thead>
-                <RobotRecord robots = { this.state.extinguish } />
+                <ExtinguishRobotRecord robots = { this.state.extinguish } />
               </Table>
             </Col>
           </Row>

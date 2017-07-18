@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Button } from "reactstrap";
-import store from "../stores/ApplicationStore";
+import store from "../stores/ApplicationStore"
 
 interface Robot {
   id: number,
@@ -22,34 +22,34 @@ interface MyProps {
   robots: Array<Robot>
 }
 
-class ShipmentRobots extends React.Component<MyProps, any>{
+class ExtinguishRobotRecord extends React.Component<MyProps, any>{
 
   constructor(props: MyProps){
     super(props);
-    this.ship = this.ship.bind(this);
+    this.extinguish = this.extinguish.bind(this);
     this.checkColorStatus = this.checkColorStatus.bind(this);
-    this.checkShippedStatus = this.checkShippedStatus.bind(this);
+    this.checkExtinguishedStatus = this.checkExtinguishedStatus.bind(this);
   }
 
-  ship(id: number){
-    store.dispatch({ type: "SHIP_ROBOT", payload: {id: id} });
+  extinguish(id: number){
+    store.dispatch({ type: "EXTINGUISH_ROBOT", payload: {id: id} })
   }
 
   checkColorStatus(robot: Robot): any{
-    if(robot.is_shipped){
-      return "primary"
+    if(robot.is_extinguished){
+      return "success"
     }
     else{
-      return "info"
+      return "danger"
     }
   }
 
-  checkShippedStatus(robot: Robot){
-    if(robot.is_shipped){
-      return "Shipped...."
+  checkExtinguishedStatus(robot: Robot): any{
+    if(robot.is_extinguished){
+      return "Extinguished.."
     }
     else{
-      return "Ship"
+      return "Extinguish"
     }
   }
 
@@ -64,7 +64,7 @@ class ShipmentRobots extends React.Component<MyProps, any>{
             <td>{ "'" + robot.has_tracks + "'" }</td>
             <td>{ robot.number_of_rotors }</td>
             <td>{ robot.color }</td>
-            <td><Button onClick = { ()=>{ this.ship(robot.id) } } color = { this.checkColorStatus(robot) } >{ this.checkShippedStatus(robot) }</Button></td>
+            <td><Button onClick = { ()=>{ this.extinguish(robot.id) } } color = { this.checkColorStatus(robot) } >{ this.checkExtinguishedStatus(robot) }</Button></td>
           </tr>
         )
     });
@@ -76,4 +76,4 @@ class ShipmentRobots extends React.Component<MyProps, any>{
   }
 }
 
-export default ShipmentRobots;
+export default ExtinguishRobotRecord;

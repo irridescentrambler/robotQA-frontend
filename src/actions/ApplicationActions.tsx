@@ -35,7 +35,28 @@ export var fetchRobots = function():MyState {
   return changedState;
 }
 
-export var shipOrder = function(): MyState {
+export var shipRobot = function(id: number): MyState {
   var changedState: MyState = {}
+  axios.post('http://localhost:3000/robots/' + id + '/ship.json')
+  .then((response) =>{
+    store.dispatch({ type: "FETCH_ROBOTS" });
+    store.dispatch({ type: "DISPLAY_ROBOTS", payload: changedState });
+  })
+  .catch((error) =>{
+    changedState = {}
+  });
   return changedState;
+}
+
+export var extinguishRobot = function(id: number): MyState {
+  var changedState: MyState = {}
+  axios.post('http://localhost:3000/robots/' + id + '/extinguish.json')
+  .then(function (response) {
+    store.dispatch({ type: "FETCH_ROBOTS" });
+    store.dispatch({ type: "DISPLAY_ROBOTS", payload: changedState });
+  })
+  .catch(function (error) {
+    changedState = {}
+  });
+  return changedState
 }

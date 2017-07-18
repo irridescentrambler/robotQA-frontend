@@ -801,7 +801,7 @@ module.exports = __webpack_require__(19);
 
 var _prodInvariant = __webpack_require__(20);
 
-var ReactCurrentOwner = __webpack_require__(12);
+var ReactCurrentOwner = __webpack_require__(13);
 
 var invariant = __webpack_require__(1);
 var warning = __webpack_require__(2);
@@ -1247,8 +1247,8 @@ module.exports = { debugTool: debugTool };
 "use strict";
 
 
-var bind = __webpack_require__(103);
-var isBuffer = __webpack_require__(255);
+var bind = __webpack_require__(102);
+var isBuffer = __webpack_require__(252);
 
 /*global toString:true*/
 
@@ -1552,297 +1552,6 @@ module.exports = {
 
 /***/ }),
 /* 12 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-/**
- * Copyright 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * 
- */
-
-
-
-/**
- * Keeps track of the current owner.
- *
- * The current owner is the component who should own any components that are
- * currently being constructed.
- */
-var ReactCurrentOwner = {
-  /**
-   * @internal
-   * @type {ReactComponent}
-   */
-  current: null
-};
-
-module.exports = ReactCurrentOwner;
-
-/***/ }),
-/* 13 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-/* WEBPACK VAR INJECTION */(function(process) {/**
- * Copyright 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- */
-
-
-
-var _prodInvariant = __webpack_require__(3),
-    _assign = __webpack_require__(4);
-
-var CallbackQueue = __webpack_require__(70);
-var PooledClass = __webpack_require__(18);
-var ReactFeatureFlags = __webpack_require__(71);
-var ReactReconciler = __webpack_require__(21);
-var Transaction = __webpack_require__(33);
-
-var invariant = __webpack_require__(1);
-
-var dirtyComponents = [];
-var updateBatchNumber = 0;
-var asapCallbackQueue = CallbackQueue.getPooled();
-var asapEnqueued = false;
-
-var batchingStrategy = null;
-
-function ensureInjected() {
-  !(ReactUpdates.ReactReconcileTransaction && batchingStrategy) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'ReactUpdates: must inject a reconcile transaction class and batching strategy') : _prodInvariant('123') : void 0;
-}
-
-var NESTED_UPDATES = {
-  initialize: function () {
-    this.dirtyComponentsLength = dirtyComponents.length;
-  },
-  close: function () {
-    if (this.dirtyComponentsLength !== dirtyComponents.length) {
-      // Additional updates were enqueued by componentDidUpdate handlers or
-      // similar; before our own UPDATE_QUEUEING wrapper closes, we want to run
-      // these new updates so that if A's componentDidUpdate calls setState on
-      // B, B will update before the callback A's updater provided when calling
-      // setState.
-      dirtyComponents.splice(0, this.dirtyComponentsLength);
-      flushBatchedUpdates();
-    } else {
-      dirtyComponents.length = 0;
-    }
-  }
-};
-
-var UPDATE_QUEUEING = {
-  initialize: function () {
-    this.callbackQueue.reset();
-  },
-  close: function () {
-    this.callbackQueue.notifyAll();
-  }
-};
-
-var TRANSACTION_WRAPPERS = [NESTED_UPDATES, UPDATE_QUEUEING];
-
-function ReactUpdatesFlushTransaction() {
-  this.reinitializeTransaction();
-  this.dirtyComponentsLength = null;
-  this.callbackQueue = CallbackQueue.getPooled();
-  this.reconcileTransaction = ReactUpdates.ReactReconcileTransaction.getPooled(
-  /* useCreateElement */true);
-}
-
-_assign(ReactUpdatesFlushTransaction.prototype, Transaction, {
-  getTransactionWrappers: function () {
-    return TRANSACTION_WRAPPERS;
-  },
-
-  destructor: function () {
-    this.dirtyComponentsLength = null;
-    CallbackQueue.release(this.callbackQueue);
-    this.callbackQueue = null;
-    ReactUpdates.ReactReconcileTransaction.release(this.reconcileTransaction);
-    this.reconcileTransaction = null;
-  },
-
-  perform: function (method, scope, a) {
-    // Essentially calls `this.reconcileTransaction.perform(method, scope, a)`
-    // with this transaction's wrappers around it.
-    return Transaction.perform.call(this, this.reconcileTransaction.perform, this.reconcileTransaction, method, scope, a);
-  }
-});
-
-PooledClass.addPoolingTo(ReactUpdatesFlushTransaction);
-
-function batchedUpdates(callback, a, b, c, d, e) {
-  ensureInjected();
-  return batchingStrategy.batchedUpdates(callback, a, b, c, d, e);
-}
-
-/**
- * Array comparator for ReactComponents by mount ordering.
- *
- * @param {ReactComponent} c1 first component you're comparing
- * @param {ReactComponent} c2 second component you're comparing
- * @return {number} Return value usable by Array.prototype.sort().
- */
-function mountOrderComparator(c1, c2) {
-  return c1._mountOrder - c2._mountOrder;
-}
-
-function runBatchedUpdates(transaction) {
-  var len = transaction.dirtyComponentsLength;
-  !(len === dirtyComponents.length) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'Expected flush transaction\'s stored dirty-components length (%s) to match dirty-components array length (%s).', len, dirtyComponents.length) : _prodInvariant('124', len, dirtyComponents.length) : void 0;
-
-  // Since reconciling a component higher in the owner hierarchy usually (not
-  // always -- see shouldComponentUpdate()) will reconcile children, reconcile
-  // them before their children by sorting the array.
-  dirtyComponents.sort(mountOrderComparator);
-
-  // Any updates enqueued while reconciling must be performed after this entire
-  // batch. Otherwise, if dirtyComponents is [A, B] where A has children B and
-  // C, B could update twice in a single batch if C's render enqueues an update
-  // to B (since B would have already updated, we should skip it, and the only
-  // way we can know to do so is by checking the batch counter).
-  updateBatchNumber++;
-
-  for (var i = 0; i < len; i++) {
-    // If a component is unmounted before pending changes apply, it will still
-    // be here, but we assume that it has cleared its _pendingCallbacks and
-    // that performUpdateIfNecessary is a noop.
-    var component = dirtyComponents[i];
-
-    // If performUpdateIfNecessary happens to enqueue any new updates, we
-    // shouldn't execute the callbacks until the next render happens, so
-    // stash the callbacks first
-    var callbacks = component._pendingCallbacks;
-    component._pendingCallbacks = null;
-
-    var markerName;
-    if (ReactFeatureFlags.logTopLevelRenders) {
-      var namedComponent = component;
-      // Duck type TopLevelWrapper. This is probably always true.
-      if (component._currentElement.type.isReactTopLevelWrapper) {
-        namedComponent = component._renderedComponent;
-      }
-      markerName = 'React update: ' + namedComponent.getName();
-      console.time(markerName);
-    }
-
-    ReactReconciler.performUpdateIfNecessary(component, transaction.reconcileTransaction, updateBatchNumber);
-
-    if (markerName) {
-      console.timeEnd(markerName);
-    }
-
-    if (callbacks) {
-      for (var j = 0; j < callbacks.length; j++) {
-        transaction.callbackQueue.enqueue(callbacks[j], component.getPublicInstance());
-      }
-    }
-  }
-}
-
-var flushBatchedUpdates = function () {
-  // ReactUpdatesFlushTransaction's wrappers will clear the dirtyComponents
-  // array and perform any updates enqueued by mount-ready handlers (i.e.,
-  // componentDidUpdate) but we need to check here too in order to catch
-  // updates enqueued by setState callbacks and asap calls.
-  while (dirtyComponents.length || asapEnqueued) {
-    if (dirtyComponents.length) {
-      var transaction = ReactUpdatesFlushTransaction.getPooled();
-      transaction.perform(runBatchedUpdates, null, transaction);
-      ReactUpdatesFlushTransaction.release(transaction);
-    }
-
-    if (asapEnqueued) {
-      asapEnqueued = false;
-      var queue = asapCallbackQueue;
-      asapCallbackQueue = CallbackQueue.getPooled();
-      queue.notifyAll();
-      CallbackQueue.release(queue);
-    }
-  }
-};
-
-/**
- * Mark a component as needing a rerender, adding an optional callback to a
- * list of functions which will be executed once the rerender occurs.
- */
-function enqueueUpdate(component) {
-  ensureInjected();
-
-  // Various parts of our code (such as ReactCompositeComponent's
-  // _renderValidatedComponent) assume that calls to render aren't nested;
-  // verify that that's the case. (This is called by each top-level update
-  // function, like setState, forceUpdate, etc.; creation and
-  // destruction of top-level components is guarded in ReactMount.)
-
-  if (!batchingStrategy.isBatchingUpdates) {
-    batchingStrategy.batchedUpdates(enqueueUpdate, component);
-    return;
-  }
-
-  dirtyComponents.push(component);
-  if (component._updateBatchNumber == null) {
-    component._updateBatchNumber = updateBatchNumber + 1;
-  }
-}
-
-/**
- * Enqueue a callback to be run at the end of the current batching cycle. Throws
- * if no updates are currently being performed.
- */
-function asap(callback, context) {
-  !batchingStrategy.isBatchingUpdates ? process.env.NODE_ENV !== 'production' ? invariant(false, 'ReactUpdates.asap: Can\'t enqueue an asap callback in a context whereupdates are not being batched.') : _prodInvariant('125') : void 0;
-  asapCallbackQueue.enqueue(callback, context);
-  asapEnqueued = true;
-}
-
-var ReactUpdatesInjection = {
-  injectReconcileTransaction: function (ReconcileTransaction) {
-    !ReconcileTransaction ? process.env.NODE_ENV !== 'production' ? invariant(false, 'ReactUpdates: must provide a reconcile transaction class') : _prodInvariant('126') : void 0;
-    ReactUpdates.ReactReconcileTransaction = ReconcileTransaction;
-  },
-
-  injectBatchingStrategy: function (_batchingStrategy) {
-    !_batchingStrategy ? process.env.NODE_ENV !== 'production' ? invariant(false, 'ReactUpdates: must provide a batching strategy') : _prodInvariant('127') : void 0;
-    !(typeof _batchingStrategy.batchedUpdates === 'function') ? process.env.NODE_ENV !== 'production' ? invariant(false, 'ReactUpdates: must provide a batchedUpdates() function') : _prodInvariant('128') : void 0;
-    !(typeof _batchingStrategy.isBatchingUpdates === 'boolean') ? process.env.NODE_ENV !== 'production' ? invariant(false, 'ReactUpdates: must provide an isBatchingUpdates boolean attribute') : _prodInvariant('129') : void 0;
-    batchingStrategy = _batchingStrategy;
-  }
-};
-
-var ReactUpdates = {
-  /**
-   * React references `ReactReconcileTransaction` using this property in order
-   * to allow dependency injection.
-   *
-   * @internal
-   */
-  ReactReconcileTransaction: null,
-
-  batchedUpdates: batchedUpdates,
-  enqueueUpdate: enqueueUpdate,
-  flushBatchedUpdates: flushBatchedUpdates,
-  injection: ReactUpdatesInjection,
-  asap: asap
-};
-
-module.exports = ReactUpdates;
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(0)))
-
-/***/ }),
-/* 14 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -1928,7 +1637,7 @@ Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_2_classnames___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_2_classnames__);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_3_lodash_isobject__ = __webpack_require__(216);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_3_lodash_isobject___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_3_lodash_isobject__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4_react_dom__ = __webpack_require__(40);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4_react_dom__ = __webpack_require__(41);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_4_react_dom___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_4_react_dom__);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_5_lodash_isfunction__ = __webpack_require__(217);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_5_lodash_isfunction___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_5_lodash_isfunction__);
@@ -5936,6 +5645,297 @@ var UncontrolledTooltip = components.UncontrolledTooltip;
 
 
 /***/ }),
+/* 13 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+/**
+ * Copyright 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ * 
+ */
+
+
+
+/**
+ * Keeps track of the current owner.
+ *
+ * The current owner is the component who should own any components that are
+ * currently being constructed.
+ */
+var ReactCurrentOwner = {
+  /**
+   * @internal
+   * @type {ReactComponent}
+   */
+  current: null
+};
+
+module.exports = ReactCurrentOwner;
+
+/***/ }),
+/* 14 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+/* WEBPACK VAR INJECTION */(function(process) {/**
+ * Copyright 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ */
+
+
+
+var _prodInvariant = __webpack_require__(3),
+    _assign = __webpack_require__(4);
+
+var CallbackQueue = __webpack_require__(70);
+var PooledClass = __webpack_require__(18);
+var ReactFeatureFlags = __webpack_require__(71);
+var ReactReconciler = __webpack_require__(21);
+var Transaction = __webpack_require__(33);
+
+var invariant = __webpack_require__(1);
+
+var dirtyComponents = [];
+var updateBatchNumber = 0;
+var asapCallbackQueue = CallbackQueue.getPooled();
+var asapEnqueued = false;
+
+var batchingStrategy = null;
+
+function ensureInjected() {
+  !(ReactUpdates.ReactReconcileTransaction && batchingStrategy) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'ReactUpdates: must inject a reconcile transaction class and batching strategy') : _prodInvariant('123') : void 0;
+}
+
+var NESTED_UPDATES = {
+  initialize: function () {
+    this.dirtyComponentsLength = dirtyComponents.length;
+  },
+  close: function () {
+    if (this.dirtyComponentsLength !== dirtyComponents.length) {
+      // Additional updates were enqueued by componentDidUpdate handlers or
+      // similar; before our own UPDATE_QUEUEING wrapper closes, we want to run
+      // these new updates so that if A's componentDidUpdate calls setState on
+      // B, B will update before the callback A's updater provided when calling
+      // setState.
+      dirtyComponents.splice(0, this.dirtyComponentsLength);
+      flushBatchedUpdates();
+    } else {
+      dirtyComponents.length = 0;
+    }
+  }
+};
+
+var UPDATE_QUEUEING = {
+  initialize: function () {
+    this.callbackQueue.reset();
+  },
+  close: function () {
+    this.callbackQueue.notifyAll();
+  }
+};
+
+var TRANSACTION_WRAPPERS = [NESTED_UPDATES, UPDATE_QUEUEING];
+
+function ReactUpdatesFlushTransaction() {
+  this.reinitializeTransaction();
+  this.dirtyComponentsLength = null;
+  this.callbackQueue = CallbackQueue.getPooled();
+  this.reconcileTransaction = ReactUpdates.ReactReconcileTransaction.getPooled(
+  /* useCreateElement */true);
+}
+
+_assign(ReactUpdatesFlushTransaction.prototype, Transaction, {
+  getTransactionWrappers: function () {
+    return TRANSACTION_WRAPPERS;
+  },
+
+  destructor: function () {
+    this.dirtyComponentsLength = null;
+    CallbackQueue.release(this.callbackQueue);
+    this.callbackQueue = null;
+    ReactUpdates.ReactReconcileTransaction.release(this.reconcileTransaction);
+    this.reconcileTransaction = null;
+  },
+
+  perform: function (method, scope, a) {
+    // Essentially calls `this.reconcileTransaction.perform(method, scope, a)`
+    // with this transaction's wrappers around it.
+    return Transaction.perform.call(this, this.reconcileTransaction.perform, this.reconcileTransaction, method, scope, a);
+  }
+});
+
+PooledClass.addPoolingTo(ReactUpdatesFlushTransaction);
+
+function batchedUpdates(callback, a, b, c, d, e) {
+  ensureInjected();
+  return batchingStrategy.batchedUpdates(callback, a, b, c, d, e);
+}
+
+/**
+ * Array comparator for ReactComponents by mount ordering.
+ *
+ * @param {ReactComponent} c1 first component you're comparing
+ * @param {ReactComponent} c2 second component you're comparing
+ * @return {number} Return value usable by Array.prototype.sort().
+ */
+function mountOrderComparator(c1, c2) {
+  return c1._mountOrder - c2._mountOrder;
+}
+
+function runBatchedUpdates(transaction) {
+  var len = transaction.dirtyComponentsLength;
+  !(len === dirtyComponents.length) ? process.env.NODE_ENV !== 'production' ? invariant(false, 'Expected flush transaction\'s stored dirty-components length (%s) to match dirty-components array length (%s).', len, dirtyComponents.length) : _prodInvariant('124', len, dirtyComponents.length) : void 0;
+
+  // Since reconciling a component higher in the owner hierarchy usually (not
+  // always -- see shouldComponentUpdate()) will reconcile children, reconcile
+  // them before their children by sorting the array.
+  dirtyComponents.sort(mountOrderComparator);
+
+  // Any updates enqueued while reconciling must be performed after this entire
+  // batch. Otherwise, if dirtyComponents is [A, B] where A has children B and
+  // C, B could update twice in a single batch if C's render enqueues an update
+  // to B (since B would have already updated, we should skip it, and the only
+  // way we can know to do so is by checking the batch counter).
+  updateBatchNumber++;
+
+  for (var i = 0; i < len; i++) {
+    // If a component is unmounted before pending changes apply, it will still
+    // be here, but we assume that it has cleared its _pendingCallbacks and
+    // that performUpdateIfNecessary is a noop.
+    var component = dirtyComponents[i];
+
+    // If performUpdateIfNecessary happens to enqueue any new updates, we
+    // shouldn't execute the callbacks until the next render happens, so
+    // stash the callbacks first
+    var callbacks = component._pendingCallbacks;
+    component._pendingCallbacks = null;
+
+    var markerName;
+    if (ReactFeatureFlags.logTopLevelRenders) {
+      var namedComponent = component;
+      // Duck type TopLevelWrapper. This is probably always true.
+      if (component._currentElement.type.isReactTopLevelWrapper) {
+        namedComponent = component._renderedComponent;
+      }
+      markerName = 'React update: ' + namedComponent.getName();
+      console.time(markerName);
+    }
+
+    ReactReconciler.performUpdateIfNecessary(component, transaction.reconcileTransaction, updateBatchNumber);
+
+    if (markerName) {
+      console.timeEnd(markerName);
+    }
+
+    if (callbacks) {
+      for (var j = 0; j < callbacks.length; j++) {
+        transaction.callbackQueue.enqueue(callbacks[j], component.getPublicInstance());
+      }
+    }
+  }
+}
+
+var flushBatchedUpdates = function () {
+  // ReactUpdatesFlushTransaction's wrappers will clear the dirtyComponents
+  // array and perform any updates enqueued by mount-ready handlers (i.e.,
+  // componentDidUpdate) but we need to check here too in order to catch
+  // updates enqueued by setState callbacks and asap calls.
+  while (dirtyComponents.length || asapEnqueued) {
+    if (dirtyComponents.length) {
+      var transaction = ReactUpdatesFlushTransaction.getPooled();
+      transaction.perform(runBatchedUpdates, null, transaction);
+      ReactUpdatesFlushTransaction.release(transaction);
+    }
+
+    if (asapEnqueued) {
+      asapEnqueued = false;
+      var queue = asapCallbackQueue;
+      asapCallbackQueue = CallbackQueue.getPooled();
+      queue.notifyAll();
+      CallbackQueue.release(queue);
+    }
+  }
+};
+
+/**
+ * Mark a component as needing a rerender, adding an optional callback to a
+ * list of functions which will be executed once the rerender occurs.
+ */
+function enqueueUpdate(component) {
+  ensureInjected();
+
+  // Various parts of our code (such as ReactCompositeComponent's
+  // _renderValidatedComponent) assume that calls to render aren't nested;
+  // verify that that's the case. (This is called by each top-level update
+  // function, like setState, forceUpdate, etc.; creation and
+  // destruction of top-level components is guarded in ReactMount.)
+
+  if (!batchingStrategy.isBatchingUpdates) {
+    batchingStrategy.batchedUpdates(enqueueUpdate, component);
+    return;
+  }
+
+  dirtyComponents.push(component);
+  if (component._updateBatchNumber == null) {
+    component._updateBatchNumber = updateBatchNumber + 1;
+  }
+}
+
+/**
+ * Enqueue a callback to be run at the end of the current batching cycle. Throws
+ * if no updates are currently being performed.
+ */
+function asap(callback, context) {
+  !batchingStrategy.isBatchingUpdates ? process.env.NODE_ENV !== 'production' ? invariant(false, 'ReactUpdates.asap: Can\'t enqueue an asap callback in a context whereupdates are not being batched.') : _prodInvariant('125') : void 0;
+  asapCallbackQueue.enqueue(callback, context);
+  asapEnqueued = true;
+}
+
+var ReactUpdatesInjection = {
+  injectReconcileTransaction: function (ReconcileTransaction) {
+    !ReconcileTransaction ? process.env.NODE_ENV !== 'production' ? invariant(false, 'ReactUpdates: must provide a reconcile transaction class') : _prodInvariant('126') : void 0;
+    ReactUpdates.ReactReconcileTransaction = ReconcileTransaction;
+  },
+
+  injectBatchingStrategy: function (_batchingStrategy) {
+    !_batchingStrategy ? process.env.NODE_ENV !== 'production' ? invariant(false, 'ReactUpdates: must provide a batching strategy') : _prodInvariant('127') : void 0;
+    !(typeof _batchingStrategy.batchedUpdates === 'function') ? process.env.NODE_ENV !== 'production' ? invariant(false, 'ReactUpdates: must provide a batchedUpdates() function') : _prodInvariant('128') : void 0;
+    !(typeof _batchingStrategy.isBatchingUpdates === 'boolean') ? process.env.NODE_ENV !== 'production' ? invariant(false, 'ReactUpdates: must provide an isBatchingUpdates boolean attribute') : _prodInvariant('129') : void 0;
+    batchingStrategy = _batchingStrategy;
+  }
+};
+
+var ReactUpdates = {
+  /**
+   * React references `ReactReconcileTransaction` using this property in order
+   * to allow dependency injection.
+   *
+   * @internal
+   */
+  ReactReconcileTransaction: null,
+
+  batchedUpdates: batchedUpdates,
+  enqueueUpdate: enqueueUpdate,
+  flushBatchedUpdates: flushBatchedUpdates,
+  injection: ReactUpdatesInjection,
+  asap: asap
+};
+
+module.exports = ReactUpdates;
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(0)))
+
+/***/ }),
 /* 15 */
 /***/ (function(module, exports, __webpack_require__) {
 
@@ -6441,7 +6441,7 @@ module.exports = DOMProperty;
 
 var _assign = __webpack_require__(4);
 
-var ReactCurrentOwner = __webpack_require__(12);
+var ReactCurrentOwner = __webpack_require__(13);
 
 var warning = __webpack_require__(2);
 var canDefineProperty = __webpack_require__(30);
@@ -6921,7 +6921,7 @@ var createFactory = ReactElement.createFactory;
 var cloneElement = ReactElement.cloneElement;
 
 if (process.env.NODE_ENV !== 'production') {
-  var lowPriorityWarning = __webpack_require__(38);
+  var lowPriorityWarning = __webpack_require__(39);
   var canDefineProperty = __webpack_require__(30);
   var ReactElementValidator = __webpack_require__(63);
   var didWarnPropTypesDeprecated = false;
@@ -7258,10 +7258,10 @@ module.exports = ReactReconciler;
 
 
 
-var DOMNamespaces = __webpack_require__(47);
+var DOMNamespaces = __webpack_require__(48);
 var setInnerHTML = __webpack_require__(35);
 
-var createMicrosoftUnsafeLocalFunction = __webpack_require__(48);
+var createMicrosoftUnsafeLocalFunction = __webpack_require__(49);
 var setTextContent = __webpack_require__(75);
 
 var ELEMENT_NODE_TYPE = 1;
@@ -7382,7 +7382,7 @@ module.exports = DOMLazyTree;
 
 
 var EventPluginHub = __webpack_require__(24);
-var EventPluginUtils = __webpack_require__(41);
+var EventPluginUtils = __webpack_require__(42);
 
 var accumulateInto = __webpack_require__(67);
 var forEachAccumulated = __webpack_require__(68);
@@ -7524,8 +7524,8 @@ module.exports = EventPropagators;
 var _prodInvariant = __webpack_require__(3);
 
 var EventPluginRegistry = __webpack_require__(32);
-var EventPluginUtils = __webpack_require__(41);
-var ReactErrorUtils = __webpack_require__(42);
+var EventPluginUtils = __webpack_require__(42);
+var ReactErrorUtils = __webpack_require__(43);
 
 var accumulateInto = __webpack_require__(67);
 var forEachAccumulated = __webpack_require__(68);
@@ -7803,7 +7803,7 @@ module.exports = EventPluginHub;
 
 var SyntheticEvent = __webpack_require__(15);
 
-var getEventTarget = __webpack_require__(43);
+var getEventTarget = __webpack_require__(44);
 
 /**
  * @interface UIEvent
@@ -8569,7 +8569,7 @@ module.exports = TransactionImpl;
 var SyntheticUIEvent = __webpack_require__(25);
 var ViewportMetrics = __webpack_require__(74);
 
-var getEventModifierState = __webpack_require__(45);
+var getEventModifierState = __webpack_require__(46);
 
 /**
  * @interface MouseEvent
@@ -8644,12 +8644,12 @@ module.exports = SyntheticMouseEvent;
 
 
 var ExecutionEnvironment = __webpack_require__(6);
-var DOMNamespaces = __webpack_require__(47);
+var DOMNamespaces = __webpack_require__(48);
 
 var WHITESPACE_TEST = /^[ \r\n\t\f]/;
 var NONVISIBLE_TEST = /<(!--|link|noscript|meta|script|style)[ \r\n\t\f\/>]/;
 
-var createMicrosoftUnsafeLocalFunction = __webpack_require__(48);
+var createMicrosoftUnsafeLocalFunction = __webpack_require__(49);
 
 // SVG temp container for IE lacking innerHTML
 var reusableSVGContainer;
@@ -8880,7 +8880,7 @@ var ReactEventEmitterMixin = __webpack_require__(157);
 var ViewportMetrics = __webpack_require__(74);
 
 var getVendorPrefixedEventName = __webpack_require__(158);
-var isEventSupported = __webpack_require__(44);
+var isEventSupported = __webpack_require__(45);
 
 /**
  * Summary of `ReactBrowserEventEmitter` event handling:
@@ -9190,6 +9190,20 @@ module.exports = ReactBrowserEventEmitter;
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var redux_1 = __webpack_require__(232);
+var ApplicationReducer_1 = __webpack_require__(248);
+var store = redux_1.createStore(ApplicationReducer_1.default);
+store.dispatch({ type: "INDEX" });
+exports.default = store;
+
+
+/***/ }),
+/* 39 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
 /* WEBPACK VAR INJECTION */(function(process) {/**
  * Copyright 2014-2015, Facebook, Inc.
  * All rights reserved.
@@ -9257,7 +9271,7 @@ module.exports = lowPriorityWarning;
 /* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(0)))
 
 /***/ }),
-/* 39 */
+/* 40 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9278,7 +9292,7 @@ module.exports = ReactPropTypesSecret;
 
 
 /***/ }),
-/* 40 */
+/* 41 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9288,7 +9302,7 @@ module.exports = __webpack_require__(123);
 
 
 /***/ }),
-/* 41 */
+/* 42 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9306,7 +9320,7 @@ module.exports = __webpack_require__(123);
 
 var _prodInvariant = __webpack_require__(3);
 
-var ReactErrorUtils = __webpack_require__(42);
+var ReactErrorUtils = __webpack_require__(43);
 
 var invariant = __webpack_require__(1);
 var warning = __webpack_require__(2);
@@ -9520,7 +9534,7 @@ module.exports = EventPluginUtils;
 /* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(0)))
 
 /***/ }),
-/* 42 */
+/* 43 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9602,7 +9616,7 @@ module.exports = ReactErrorUtils;
 /* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(0)))
 
 /***/ }),
-/* 43 */
+/* 44 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9642,7 +9656,7 @@ function getEventTarget(nativeEvent) {
 module.exports = getEventTarget;
 
 /***/ }),
-/* 44 */
+/* 45 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9707,7 +9721,7 @@ function isEventSupported(eventNameSuffix, capture) {
 module.exports = isEventSupported;
 
 /***/ }),
-/* 45 */
+/* 46 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9755,7 +9769,7 @@ function getEventModifierState(nativeEvent) {
 module.exports = getEventModifierState;
 
 /***/ }),
-/* 46 */
+/* 47 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9776,7 +9790,7 @@ var Danger = __webpack_require__(142);
 var ReactDOMComponentTree = __webpack_require__(5);
 var ReactInstrumentation = __webpack_require__(10);
 
-var createMicrosoftUnsafeLocalFunction = __webpack_require__(48);
+var createMicrosoftUnsafeLocalFunction = __webpack_require__(49);
 var setInnerHTML = __webpack_require__(35);
 var setTextContent = __webpack_require__(75);
 
@@ -9987,7 +10001,7 @@ module.exports = DOMChildrenOperations;
 /* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(0)))
 
 /***/ }),
-/* 47 */
+/* 48 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10012,7 +10026,7 @@ var DOMNamespaces = {
 module.exports = DOMNamespaces;
 
 /***/ }),
-/* 48 */
+/* 49 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10049,7 +10063,7 @@ var createMicrosoftUnsafeLocalFunction = function (func) {
 module.exports = createMicrosoftUnsafeLocalFunction;
 
 /***/ }),
-/* 49 */
+/* 50 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10193,7 +10207,7 @@ module.exports = LinkedValueUtils;
 /* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(0)))
 
 /***/ }),
-/* 50 */
+/* 51 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10243,7 +10257,7 @@ module.exports = ReactComponentEnvironment;
 /* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(0)))
 
 /***/ }),
-/* 51 */
+/* 52 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10316,7 +10330,7 @@ function shallowEqual(objA, objB) {
 module.exports = shallowEqual;
 
 /***/ }),
-/* 52 */
+/* 53 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10363,7 +10377,7 @@ function shouldUpdateReactComponent(prevElement, nextElement) {
 module.exports = shouldUpdateReactComponent;
 
 /***/ }),
-/* 53 */
+/* 54 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10427,7 +10441,7 @@ var KeyEscapeUtils = {
 module.exports = KeyEscapeUtils;
 
 /***/ }),
-/* 54 */
+/* 55 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10445,10 +10459,10 @@ module.exports = KeyEscapeUtils;
 
 var _prodInvariant = __webpack_require__(3);
 
-var ReactCurrentOwner = __webpack_require__(12);
+var ReactCurrentOwner = __webpack_require__(13);
 var ReactInstanceMap = __webpack_require__(26);
 var ReactInstrumentation = __webpack_require__(10);
-var ReactUpdates = __webpack_require__(13);
+var ReactUpdates = __webpack_require__(14);
 
 var invariant = __webpack_require__(1);
 var warning = __webpack_require__(2);
@@ -10667,7 +10681,7 @@ module.exports = ReactUpdateQueue;
 /* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(0)))
 
 /***/ }),
-/* 55 */
+/* 56 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -11044,7 +11058,7 @@ module.exports = validateDOMNesting;
 /* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(0)))
 
 /***/ }),
-/* 56 */
+/* 57 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -11099,47 +11113,6 @@ function getEventCharCode(nativeEvent) {
 module.exports = getEventCharCode;
 
 /***/ }),
-/* 57 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = Object.setPrototypeOf ||
-        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-var React = __webpack_require__(7);
-var RobotRecord = (function (_super) {
-    __extends(RobotRecord, _super);
-    function RobotRecord() {
-        return _super !== null && _super.apply(this, arguments) || this;
-    }
-    RobotRecord.prototype.render = function () {
-        var robots = this.props.robots.map(function (robot) {
-            return (React.createElement("tr", { key: robot.id },
-                React.createElement("td", null, robot.id),
-                React.createElement("td", null, robot.name),
-                React.createElement("td", null, "'" + robot.has_sentience + "'"),
-                React.createElement("td", null, "'" + robot.has_wheels + "'"),
-                React.createElement("td", null, "'" + robot.has_tracks + "'"),
-                React.createElement("td", null, robot.number_of_rotors),
-                React.createElement("td", null, robot.color)));
-        });
-        return (React.createElement("tbody", null, robots));
-    };
-    return RobotRecord;
-}(React.Component));
-exports.default = RobotRecord;
-
-
-/***/ }),
 /* 58 */
 /***/ (function(module, exports, __webpack_require__) {
 
@@ -11147,7 +11120,7 @@ exports.default = RobotRecord;
 /* WEBPACK VAR INJECTION */(function(process) {
 
 var utils = __webpack_require__(11);
-var normalizeHeaderName = __webpack_require__(257);
+var normalizeHeaderName = __webpack_require__(254);
 
 var DEFAULT_CONTENT_TYPE = {
   'Content-Type': 'application/x-www-form-urlencoded'
@@ -11163,10 +11136,10 @@ function getDefaultAdapter() {
   var adapter;
   if (typeof XMLHttpRequest !== 'undefined') {
     // For browsers use XHR adapter
-    adapter = __webpack_require__(104);
+    adapter = __webpack_require__(103);
   } else if (typeof process !== 'undefined') {
     // For node use HTTP adapter
-    adapter = __webpack_require__(104);
+    adapter = __webpack_require__(103);
   }
   return adapter;
 }
@@ -11264,7 +11237,7 @@ var ReactNoopUpdateQueue = __webpack_require__(60);
 var canDefineProperty = __webpack_require__(30);
 var emptyObject = __webpack_require__(31);
 var invariant = __webpack_require__(1);
-var lowPriorityWarning = __webpack_require__(38);
+var lowPriorityWarning = __webpack_require__(39);
 
 /**
  * Base class helpers for the updating state of a component.
@@ -11584,7 +11557,7 @@ module.exports = getIteratorFn;
 
 
 
-var ReactCurrentOwner = __webpack_require__(12);
+var ReactCurrentOwner = __webpack_require__(13);
 var ReactComponentTreeHook = __webpack_require__(8);
 var ReactElement = __webpack_require__(17);
 
@@ -11593,7 +11566,7 @@ var checkReactTypeSpec = __webpack_require__(114);
 var canDefineProperty = __webpack_require__(30);
 var getIteratorFn = __webpack_require__(62);
 var warning = __webpack_require__(2);
-var lowPriorityWarning = __webpack_require__(38);
+var lowPriorityWarning = __webpack_require__(39);
 
 function getDeclarationErrorAddendum() {
   if (ReactCurrentOwner.current) {
@@ -11869,7 +11842,7 @@ var emptyFunction = __webpack_require__(9);
 var invariant = __webpack_require__(1);
 var warning = __webpack_require__(2);
 
-var ReactPropTypesSecret = __webpack_require__(39);
+var ReactPropTypesSecret = __webpack_require__(40);
 var checkPropTypes = __webpack_require__(118);
 
 module.exports = function(isValidElement, throwOnDirectAccess) {
@@ -13426,9 +13399,9 @@ module.exports = ReactPropTypesSecret;
 
 var _assign = __webpack_require__(4);
 
-var LinkedValueUtils = __webpack_require__(49);
+var LinkedValueUtils = __webpack_require__(50);
 var ReactDOMComponentTree = __webpack_require__(5);
-var ReactUpdates = __webpack_require__(13);
+var ReactUpdates = __webpack_require__(14);
 
 var warning = __webpack_require__(2);
 
@@ -13922,12 +13895,12 @@ module.exports = ReactHostComponent;
 
 var _prodInvariant = __webpack_require__(3);
 
-var ReactCurrentOwner = __webpack_require__(12);
+var ReactCurrentOwner = __webpack_require__(13);
 var REACT_ELEMENT_TYPE = __webpack_require__(168);
 
 var getIteratorFn = __webpack_require__(169);
 var invariant = __webpack_require__(1);
-var KeyEscapeUtils = __webpack_require__(53);
+var KeyEscapeUtils = __webpack_require__(54);
 var warning = __webpack_require__(2);
 
 var SEPARATOR = '.';
@@ -14370,7 +14343,7 @@ var DOMLazyTree = __webpack_require__(22);
 var DOMProperty = __webpack_require__(16);
 var React = __webpack_require__(19);
 var ReactBrowserEventEmitter = __webpack_require__(37);
-var ReactCurrentOwner = __webpack_require__(12);
+var ReactCurrentOwner = __webpack_require__(13);
 var ReactDOMComponentTree = __webpack_require__(5);
 var ReactDOMContainerInfo = __webpack_require__(198);
 var ReactDOMFeatureFlags = __webpack_require__(199);
@@ -14379,14 +14352,14 @@ var ReactInstanceMap = __webpack_require__(26);
 var ReactInstrumentation = __webpack_require__(10);
 var ReactMarkupChecksum = __webpack_require__(200);
 var ReactReconciler = __webpack_require__(21);
-var ReactUpdateQueue = __webpack_require__(54);
-var ReactUpdates = __webpack_require__(13);
+var ReactUpdateQueue = __webpack_require__(55);
+var ReactUpdates = __webpack_require__(14);
 
 var emptyObject = __webpack_require__(31);
 var instantiateReactComponent = __webpack_require__(81);
 var invariant = __webpack_require__(1);
 var setInnerHTML = __webpack_require__(35);
-var shouldUpdateReactComponent = __webpack_require__(52);
+var shouldUpdateReactComponent = __webpack_require__(53);
 var warning = __webpack_require__(2);
 
 var ATTR_NAME = DOMProperty.ID_ATTRIBUTE_NAME;
@@ -15713,27 +15686,13 @@ var nameShape = exports.nameShape = _propTypes2.default.oneOfType([_propTypes2.d
 
 /***/ }),
 /* 96 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", { value: true });
-var redux_1 = __webpack_require__(235);
-var ApplicationReducer_1 = __webpack_require__(251);
-var store = redux_1.createStore(ApplicationReducer_1.default);
-store.dispatch({ type: "INDEX" });
-exports.default = store;
-
-
-/***/ }),
-/* 97 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return ActionTypes; });
 /* harmony export (immutable) */ __webpack_exports__["b"] = createStore;
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_lodash_es_isPlainObject__ = __webpack_require__(98);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_symbol_observable__ = __webpack_require__(244);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_lodash_es_isPlainObject__ = __webpack_require__(97);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_symbol_observable__ = __webpack_require__(241);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_symbol_observable___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1_symbol_observable__);
 
 
@@ -15985,13 +15944,13 @@ var ActionTypes = {
 }
 
 /***/ }),
-/* 98 */
+/* 97 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__baseGetTag_js__ = __webpack_require__(236);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__getPrototype_js__ = __webpack_require__(241);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__isObjectLike_js__ = __webpack_require__(243);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__baseGetTag_js__ = __webpack_require__(233);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__getPrototype_js__ = __webpack_require__(238);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__isObjectLike_js__ = __webpack_require__(240);
 
 
 
@@ -16057,11 +16016,11 @@ function isPlainObject(value) {
 
 
 /***/ }),
-/* 99 */
+/* 98 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__root_js__ = __webpack_require__(237);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__root_js__ = __webpack_require__(234);
 
 
 /** Built-in value references. */
@@ -16071,7 +16030,7 @@ var Symbol = __WEBPACK_IMPORTED_MODULE_0__root_js__["a" /* default */].Symbol;
 
 
 /***/ }),
-/* 100 */
+/* 99 */
 /***/ (function(module, exports) {
 
 var g;
@@ -16098,7 +16057,7 @@ module.exports = g;
 
 
 /***/ }),
-/* 101 */
+/* 100 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -16126,7 +16085,7 @@ function warning(message) {
 }
 
 /***/ }),
-/* 102 */
+/* 101 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -16165,7 +16124,7 @@ function compose() {
 }
 
 /***/ }),
-/* 103 */
+/* 102 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -16183,19 +16142,19 @@ module.exports = function bind(fn, thisArg) {
 
 
 /***/ }),
-/* 104 */
+/* 103 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 /* WEBPACK VAR INJECTION */(function(process) {
 
 var utils = __webpack_require__(11);
-var settle = __webpack_require__(258);
-var buildURL = __webpack_require__(260);
-var parseHeaders = __webpack_require__(261);
-var isURLSameOrigin = __webpack_require__(262);
-var createError = __webpack_require__(105);
-var btoa = (typeof window !== 'undefined' && window.btoa && window.btoa.bind(window)) || __webpack_require__(263);
+var settle = __webpack_require__(255);
+var buildURL = __webpack_require__(257);
+var parseHeaders = __webpack_require__(258);
+var isURLSameOrigin = __webpack_require__(259);
+var createError = __webpack_require__(104);
+var btoa = (typeof window !== 'undefined' && window.btoa && window.btoa.bind(window)) || __webpack_require__(260);
 
 module.exports = function xhrAdapter(config) {
   return new Promise(function dispatchXhrRequest(resolve, reject) {
@@ -16292,7 +16251,7 @@ module.exports = function xhrAdapter(config) {
     // This is only done if running in a standard browser environment.
     // Specifically not if we're in a web worker, or react-native.
     if (utils.isStandardBrowserEnv()) {
-      var cookies = __webpack_require__(264);
+      var cookies = __webpack_require__(261);
 
       // Add xsrf header
       var xsrfValue = (config.withCredentials || isURLSameOrigin(config.url)) && config.xsrfCookieName ?
@@ -16371,13 +16330,13 @@ module.exports = function xhrAdapter(config) {
 /* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(0)))
 
 /***/ }),
-/* 105 */
+/* 104 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 
-var enhanceError = __webpack_require__(259);
+var enhanceError = __webpack_require__(256);
 
 /**
  * Create an Error with the specified message, config, error code, request and response.
@@ -16396,7 +16355,7 @@ module.exports = function createError(message, config, code, request, response) 
 
 
 /***/ }),
-/* 106 */
+/* 105 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -16408,7 +16367,7 @@ module.exports = function isCancel(value) {
 
 
 /***/ }),
-/* 107 */
+/* 106 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -16434,6 +16393,47 @@ module.exports = Cancel;
 
 
 /***/ }),
+/* 107 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var React = __webpack_require__(7);
+var RobotRecord = (function (_super) {
+    __extends(RobotRecord, _super);
+    function RobotRecord() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    RobotRecord.prototype.render = function () {
+        var robots = this.props.robots.map(function (robot) {
+            return (React.createElement("tr", { key: robot.id },
+                React.createElement("td", null, robot.id),
+                React.createElement("td", null, robot.name),
+                React.createElement("td", null, "'" + robot.has_sentience + "'"),
+                React.createElement("td", null, "'" + robot.has_wheels + "'"),
+                React.createElement("td", null, "'" + robot.has_tracks + "'"),
+                React.createElement("td", null, robot.number_of_rotors),
+                React.createElement("td", null, robot.color)));
+        });
+        return (React.createElement("tbody", null, robots));
+    };
+    return RobotRecord;
+}(React.Component));
+exports.default = RobotRecord;
+
+
+/***/ }),
 /* 108 */
 /***/ (function(module, exports, __webpack_require__) {
 
@@ -16441,7 +16441,7 @@ module.exports = Cancel;
 
 Object.defineProperty(exports, "__esModule", { value: true });
 var React = __webpack_require__(7);
-var ReactDOM = __webpack_require__(40);
+var ReactDOM = __webpack_require__(41);
 var home_1 = __webpack_require__(208);
 console.log("Hello World");
 ReactDOM.render(React.createElement(home_1.default, null), document.getElementById("root"));
@@ -16780,7 +16780,7 @@ module.exports = PooledClass;
 
 var _prodInvariant = __webpack_require__(20);
 
-var ReactCurrentOwner = __webpack_require__(12);
+var ReactCurrentOwner = __webpack_require__(13);
 var REACT_ELEMENT_TYPE = __webpack_require__(61);
 
 var getIteratorFn = __webpack_require__(62);
@@ -17371,7 +17371,7 @@ module.exports = factory(isValidElement);
 if (process.env.NODE_ENV !== 'production') {
   var invariant = __webpack_require__(1);
   var warning = __webpack_require__(2);
-  var ReactPropTypesSecret = __webpack_require__(39);
+  var ReactPropTypesSecret = __webpack_require__(40);
   var loggedTypeFailures = {};
 }
 
@@ -18415,7 +18415,7 @@ var ReactDOMComponentTree = __webpack_require__(5);
 var ReactDefaultInjection = __webpack_require__(124);
 var ReactMount = __webpack_require__(89);
 var ReactReconciler = __webpack_require__(21);
-var ReactUpdates = __webpack_require__(13);
+var ReactUpdates = __webpack_require__(14);
 var ReactVersion = __webpack_require__(202);
 
 var findDOMNode = __webpack_require__(203);
@@ -19272,12 +19272,12 @@ var EventPluginHub = __webpack_require__(24);
 var EventPropagators = __webpack_require__(23);
 var ExecutionEnvironment = __webpack_require__(6);
 var ReactDOMComponentTree = __webpack_require__(5);
-var ReactUpdates = __webpack_require__(13);
+var ReactUpdates = __webpack_require__(14);
 var SyntheticEvent = __webpack_require__(15);
 
 var inputValueTracking = __webpack_require__(72);
-var getEventTarget = __webpack_require__(43);
-var isEventSupported = __webpack_require__(44);
+var getEventTarget = __webpack_require__(44);
+var isEventSupported = __webpack_require__(45);
 var isTextInputElement = __webpack_require__(73);
 
 var eventTypes = {
@@ -20669,7 +20669,7 @@ module.exports = HTMLDOMPropertyConfig;
 
 
 
-var DOMChildrenOperations = __webpack_require__(46);
+var DOMChildrenOperations = __webpack_require__(47);
 var ReactDOMIDOperations = __webpack_require__(146);
 
 /**
@@ -21078,7 +21078,7 @@ module.exports = getMarkupWrap;
 
 
 
-var DOMChildrenOperations = __webpack_require__(46);
+var DOMChildrenOperations = __webpack_require__(47);
 var ReactDOMComponentTree = __webpack_require__(5);
 
 /**
@@ -21124,7 +21124,7 @@ var _prodInvariant = __webpack_require__(3),
 var AutoFocusUtils = __webpack_require__(148);
 var CSSPropertyOperations = __webpack_require__(149);
 var DOMLazyTree = __webpack_require__(22);
-var DOMNamespaces = __webpack_require__(47);
+var DOMNamespaces = __webpack_require__(48);
 var DOMProperty = __webpack_require__(16);
 var DOMPropertyOperations = __webpack_require__(78);
 var EventPluginHub = __webpack_require__(24);
@@ -21143,10 +21143,10 @@ var ReactServerRenderingTransaction = __webpack_require__(171);
 var emptyFunction = __webpack_require__(9);
 var escapeTextContentForBrowser = __webpack_require__(36);
 var invariant = __webpack_require__(1);
-var isEventSupported = __webpack_require__(44);
-var shallowEqual = __webpack_require__(51);
+var isEventSupported = __webpack_require__(45);
+var shallowEqual = __webpack_require__(52);
 var inputValueTracking = __webpack_require__(72);
-var validateDOMNesting = __webpack_require__(55);
+var validateDOMNesting = __webpack_require__(56);
 var warning = __webpack_require__(2);
 
 var Flags = ReactDOMComponentFlags;
@@ -22844,9 +22844,9 @@ var _prodInvariant = __webpack_require__(3),
     _assign = __webpack_require__(4);
 
 var DOMPropertyOperations = __webpack_require__(78);
-var LinkedValueUtils = __webpack_require__(49);
+var LinkedValueUtils = __webpack_require__(50);
 var ReactDOMComponentTree = __webpack_require__(5);
-var ReactUpdates = __webpack_require__(13);
+var ReactUpdates = __webpack_require__(14);
 
 var invariant = __webpack_require__(1);
 var warning = __webpack_require__(2);
@@ -23264,9 +23264,9 @@ module.exports = ReactDOMOption;
 var _prodInvariant = __webpack_require__(3),
     _assign = __webpack_require__(4);
 
-var LinkedValueUtils = __webpack_require__(49);
+var LinkedValueUtils = __webpack_require__(50);
 var ReactDOMComponentTree = __webpack_require__(5);
-var ReactUpdates = __webpack_require__(13);
+var ReactUpdates = __webpack_require__(14);
 
 var invariant = __webpack_require__(1);
 var warning = __webpack_require__(2);
@@ -23429,11 +23429,11 @@ module.exports = ReactDOMTextarea;
 
 var _prodInvariant = __webpack_require__(3);
 
-var ReactComponentEnvironment = __webpack_require__(50);
+var ReactComponentEnvironment = __webpack_require__(51);
 var ReactInstanceMap = __webpack_require__(26);
 var ReactInstrumentation = __webpack_require__(10);
 
-var ReactCurrentOwner = __webpack_require__(12);
+var ReactCurrentOwner = __webpack_require__(13);
 var ReactReconciler = __webpack_require__(21);
 var ReactChildReconciler = __webpack_require__(163);
 
@@ -23882,8 +23882,8 @@ module.exports = ReactMultiChild;
 var ReactReconciler = __webpack_require__(21);
 
 var instantiateReactComponent = __webpack_require__(81);
-var KeyEscapeUtils = __webpack_require__(53);
-var shouldUpdateReactComponent = __webpack_require__(52);
+var KeyEscapeUtils = __webpack_require__(54);
+var shouldUpdateReactComponent = __webpack_require__(53);
 var traverseAllChildren = __webpack_require__(85);
 var warning = __webpack_require__(2);
 
@@ -24042,9 +24042,9 @@ var _prodInvariant = __webpack_require__(3),
     _assign = __webpack_require__(4);
 
 var React = __webpack_require__(19);
-var ReactComponentEnvironment = __webpack_require__(50);
-var ReactCurrentOwner = __webpack_require__(12);
-var ReactErrorUtils = __webpack_require__(42);
+var ReactComponentEnvironment = __webpack_require__(51);
+var ReactCurrentOwner = __webpack_require__(13);
+var ReactErrorUtils = __webpack_require__(43);
 var ReactInstanceMap = __webpack_require__(26);
 var ReactInstrumentation = __webpack_require__(10);
 var ReactNodeTypes = __webpack_require__(82);
@@ -24056,8 +24056,8 @@ if (process.env.NODE_ENV !== 'production') {
 
 var emptyObject = __webpack_require__(31);
 var invariant = __webpack_require__(1);
-var shallowEqual = __webpack_require__(51);
-var shouldUpdateReactComponent = __webpack_require__(52);
+var shallowEqual = __webpack_require__(52);
+var shouldUpdateReactComponent = __webpack_require__(53);
 var warning = __webpack_require__(2);
 
 var CompositeTypes = {
@@ -25166,7 +25166,7 @@ module.exports = getIteratorFn;
 
 
 
-var KeyEscapeUtils = __webpack_require__(53);
+var KeyEscapeUtils = __webpack_require__(54);
 var traverseAllChildren = __webpack_require__(85);
 var warning = __webpack_require__(2);
 
@@ -25346,7 +25346,7 @@ module.exports = ReactServerRenderingTransaction;
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
-var ReactUpdateQueue = __webpack_require__(54);
+var ReactUpdateQueue = __webpack_require__(55);
 
 var warning = __webpack_require__(2);
 
@@ -25698,13 +25698,13 @@ module.exports = {
 var _prodInvariant = __webpack_require__(3),
     _assign = __webpack_require__(4);
 
-var DOMChildrenOperations = __webpack_require__(46);
+var DOMChildrenOperations = __webpack_require__(47);
 var DOMLazyTree = __webpack_require__(22);
 var ReactDOMComponentTree = __webpack_require__(5);
 
 var escapeTextContentForBrowser = __webpack_require__(36);
 var invariant = __webpack_require__(1);
-var validateDOMNesting = __webpack_require__(55);
+var validateDOMNesting = __webpack_require__(56);
 
 /**
  * Text nodes violate a couple assumptions that React makes about components:
@@ -25865,7 +25865,7 @@ module.exports = ReactDOMTextComponent;
 
 var _assign = __webpack_require__(4);
 
-var ReactUpdates = __webpack_require__(13);
+var ReactUpdates = __webpack_require__(14);
 var Transaction = __webpack_require__(33);
 
 var emptyFunction = __webpack_require__(9);
@@ -25942,9 +25942,9 @@ var EventListener = __webpack_require__(86);
 var ExecutionEnvironment = __webpack_require__(6);
 var PooledClass = __webpack_require__(18);
 var ReactDOMComponentTree = __webpack_require__(5);
-var ReactUpdates = __webpack_require__(13);
+var ReactUpdates = __webpack_require__(14);
 
-var getEventTarget = __webpack_require__(43);
+var getEventTarget = __webpack_require__(44);
 var getUnboundedScrollPosition = __webpack_require__(178);
 
 /**
@@ -26142,12 +26142,12 @@ module.exports = getUnboundedScrollPosition;
 
 var DOMProperty = __webpack_require__(16);
 var EventPluginHub = __webpack_require__(24);
-var EventPluginUtils = __webpack_require__(41);
-var ReactComponentEnvironment = __webpack_require__(50);
+var EventPluginUtils = __webpack_require__(42);
+var ReactComponentEnvironment = __webpack_require__(51);
 var ReactEmptyComponent = __webpack_require__(83);
 var ReactBrowserEventEmitter = __webpack_require__(37);
 var ReactHostComponent = __webpack_require__(84);
-var ReactUpdates = __webpack_require__(13);
+var ReactUpdates = __webpack_require__(14);
 
 var ReactInjection = {
   Component: ReactComponentEnvironment.injection,
@@ -26187,7 +26187,7 @@ var ReactBrowserEventEmitter = __webpack_require__(37);
 var ReactInputSelection = __webpack_require__(87);
 var ReactInstrumentation = __webpack_require__(10);
 var Transaction = __webpack_require__(33);
-var ReactUpdateQueue = __webpack_require__(54);
+var ReactUpdateQueue = __webpack_require__(55);
 
 /**
  * Ensures that, when possible, the selection range (currently selected text
@@ -27079,7 +27079,7 @@ var SyntheticEvent = __webpack_require__(15);
 
 var getActiveElement = __webpack_require__(88);
 var isTextInputElement = __webpack_require__(73);
-var shallowEqual = __webpack_require__(51);
+var shallowEqual = __webpack_require__(52);
 
 var skipSelectionChangeEvent = ExecutionEnvironment.canUseDOM && 'documentMode' in document && document.documentMode <= 11;
 
@@ -27283,7 +27283,7 @@ var SyntheticUIEvent = __webpack_require__(25);
 var SyntheticWheelEvent = __webpack_require__(197);
 
 var emptyFunction = __webpack_require__(9);
-var getEventCharCode = __webpack_require__(56);
+var getEventCharCode = __webpack_require__(57);
 var invariant = __webpack_require__(1);
 
 /**
@@ -27626,9 +27626,9 @@ module.exports = SyntheticFocusEvent;
 
 var SyntheticUIEvent = __webpack_require__(25);
 
-var getEventCharCode = __webpack_require__(56);
+var getEventCharCode = __webpack_require__(57);
 var getEventKey = __webpack_require__(193);
-var getEventModifierState = __webpack_require__(45);
+var getEventModifierState = __webpack_require__(46);
 
 /**
  * @interface KeyboardEvent
@@ -27713,7 +27713,7 @@ module.exports = SyntheticKeyboardEvent;
 
 
 
-var getEventCharCode = __webpack_require__(56);
+var getEventCharCode = __webpack_require__(57);
 
 /**
  * Normalization of deprecated HTML5 `key` values
@@ -27873,7 +27873,7 @@ module.exports = SyntheticDragEvent;
 
 var SyntheticUIEvent = __webpack_require__(25);
 
-var getEventModifierState = __webpack_require__(45);
+var getEventModifierState = __webpack_require__(46);
 
 /**
  * @interface TouchEvent
@@ -28021,7 +28021,7 @@ module.exports = SyntheticWheelEvent;
 
 
 
-var validateDOMNesting = __webpack_require__(55);
+var validateDOMNesting = __webpack_require__(56);
 
 var DOC_NODE_TYPE = 9;
 
@@ -28209,7 +28209,7 @@ module.exports = '15.6.1';
 
 var _prodInvariant = __webpack_require__(3);
 
-var ReactCurrentOwner = __webpack_require__(12);
+var ReactCurrentOwner = __webpack_require__(13);
 var ReactDOMComponentTree = __webpack_require__(5);
 var ReactInstanceMap = __webpack_require__(26);
 
@@ -28723,11 +28723,11 @@ var __extends = (this && this.__extends) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 var React = __webpack_require__(7);
 var Stage1Robots_1 = __webpack_require__(213);
-var Stage2Robots_1 = __webpack_require__(231);
-var Stage3Robots_1 = __webpack_require__(232);
-var Stage4Robots_1 = __webpack_require__(233);
-var ApplicationStore_1 = __webpack_require__(96);
-var reactstrap_1 = __webpack_require__(14);
+var Stage2Robots_1 = __webpack_require__(269);
+var Stage3Robots_1 = __webpack_require__(270);
+var Stage4Robots_1 = __webpack_require__(271);
+var ApplicationStore_1 = __webpack_require__(38);
+var reactstrap_1 = __webpack_require__(12);
 var RobotQA = (function (_super) {
     __extends(RobotQA, _super);
     function RobotQA(props) {
@@ -28786,11 +28786,11 @@ var __extends = (this && this.__extends) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 var React = __webpack_require__(7);
-var reactstrap_1 = __webpack_require__(14);
-var reactstrap_2 = __webpack_require__(14);
+var reactstrap_1 = __webpack_require__(12);
+var reactstrap_2 = __webpack_require__(12);
 __webpack_require__(27);
 __webpack_require__(28);
-var RobotRecord_1 = __webpack_require__(57);
+var ExtinguishRobotRecord_1 = __webpack_require__(231);
 var Stage1Robots = (function (_super) {
     __extends(Stage1Robots, _super);
     function Stage1Robots(props) {
@@ -28835,7 +28835,7 @@ var Stage1Robots = (function (_super) {
                                         React.createElement("th", null, "Has tracks"),
                                         React.createElement("th", null, "Number of rotors"),
                                         React.createElement("th", null, "Color"))),
-                                React.createElement(RobotRecord_1.default, { robots: this.state.extinguish })))))));
+                                React.createElement(ExtinguishRobotRecord_1.default, { robots: this.state.extinguish })))))));
         }
         else {
             return (React.createElement("div", null,
@@ -28883,7 +28883,7 @@ exports.default = Stage1Robots;
 
 var emptyFunction = __webpack_require__(9);
 var invariant = __webpack_require__(1);
-var ReactPropTypesSecret = __webpack_require__(39);
+var ReactPropTypesSecret = __webpack_require__(40);
 
 module.exports = function() {
   function shim(props, propName, componentName, location, propFullName, secret) {
@@ -31456,7 +31456,7 @@ var _propTypes = __webpack_require__(29);
 
 var _propTypes2 = _interopRequireDefault(_propTypes);
 
-var _reactDom = __webpack_require__(40);
+var _reactDom = __webpack_require__(41);
 
 var _PropTypes = __webpack_require__(95);
 
@@ -31902,304 +31902,38 @@ var __extends = (this && this.__extends) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 var React = __webpack_require__(7);
-var reactstrap_1 = __webpack_require__(14);
-var reactstrap_2 = __webpack_require__(14);
-__webpack_require__(27);
-__webpack_require__(28);
-var RobotRecord_1 = __webpack_require__(57);
-var Stage2Robots = (function (_super) {
-    __extends(Stage2Robots, _super);
-    function Stage2Robots(props) {
+var reactstrap_1 = __webpack_require__(12);
+var ApplicationStore_1 = __webpack_require__(38);
+var ExtinguishRobotRecord = (function (_super) {
+    __extends(ExtinguishRobotRecord, _super);
+    function ExtinguishRobotRecord(props) {
         var _this = _super.call(this, props) || this;
-        _this.state = {
-            has_records: false,
-            recycle: _this.props.recycle,
-            fetching: false
-        };
+        _this.extinguish = _this.extinguish.bind(_this);
+        _this.checkColorStatus = _this.checkColorStatus.bind(_this);
+        _this.checkExtinguishedStatus = _this.checkExtinguishedStatus.bind(_this);
         return _this;
     }
-    Stage2Robots.prototype.componentWillReceiveProps = function (nextProps) {
-        if (nextProps.recycle.length > 0) {
-            this.setState({
-                has_records: true,
-                recycle: nextProps.recycle
-            });
+    ExtinguishRobotRecord.prototype.extinguish = function (id) {
+        ApplicationStore_1.default.dispatch({ type: "EXTINGUISH_ROBOT", payload: { id: id } });
+    };
+    ExtinguishRobotRecord.prototype.checkColorStatus = function (robot) {
+        if (robot.is_extinguished) {
+            return "success";
         }
         else {
-            this.setState({
-                has_records: false,
-                recycle: []
-            });
+            return "danger";
         }
     };
-    Stage2Robots.prototype.render = function () {
-        if (this.state.has_records) {
-            return (React.createElement("div", null,
-                React.createElement(reactstrap_1.Container, { className: "robot-table" },
-                    React.createElement(reactstrap_1.Row, null,
-                        React.createElement(reactstrap_1.Col, null,
-                            React.createElement("h2", null, "Robots need to be Recycled"))),
-                    React.createElement(reactstrap_1.Row, null,
-                        React.createElement(reactstrap_1.Col, null,
-                            React.createElement(reactstrap_2.Table, null,
-                                React.createElement("thead", null,
-                                    React.createElement("tr", null,
-                                        React.createElement("th", null, "Id"),
-                                        React.createElement("th", null, "Name"),
-                                        React.createElement("th", null, "Has sentience"),
-                                        React.createElement("th", null, "Has wheels"),
-                                        React.createElement("th", null, "Has tracks"),
-                                        React.createElement("th", null, "Number of rotors"),
-                                        React.createElement("th", null, "Color"))),
-                                React.createElement(RobotRecord_1.default, { robots: this.state.recycle })))))));
+    ExtinguishRobotRecord.prototype.checkExtinguishedStatus = function (robot) {
+        if (robot.is_extinguished) {
+            return "Extinguished..";
         }
         else {
-            return (React.createElement("div", null,
-                React.createElement(reactstrap_1.Container, { className: "robot-table" },
-                    React.createElement(reactstrap_1.Row, null,
-                        React.createElement(reactstrap_1.Col, null,
-                            React.createElement("h2", null, "Robots need to be recycled"))),
-                    React.createElement(reactstrap_1.Row, null,
-                        React.createElement(reactstrap_1.Col, null,
-                            React.createElement(reactstrap_2.Table, null,
-                                React.createElement("thead", null,
-                                    React.createElement("tr", null,
-                                        React.createElement("th", null, "Id"),
-                                        React.createElement("th", null, "Name"),
-                                        React.createElement("th", null, "Has sentience"),
-                                        React.createElement("th", null, "Has wheels"),
-                                        React.createElement("th", null, "Has tracks"),
-                                        React.createElement("th", null, "Number of rotors"),
-                                        React.createElement("th", null, "Color"))),
-                                React.createElement("tbody", null,
-                                    React.createElement("tr", null,
-                                        React.createElement("td", null, "No records")))))))));
+            return "Extinguish";
         }
     };
-    return Stage2Robots;
-}(React.Component));
-exports.default = Stage2Robots;
-
-
-/***/ }),
-/* 232 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = Object.setPrototypeOf ||
-        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-var React = __webpack_require__(7);
-var reactstrap_1 = __webpack_require__(14);
-var reactstrap_2 = __webpack_require__(14);
-__webpack_require__(27);
-__webpack_require__(28);
-var RobotRecord_1 = __webpack_require__(57);
-var Stage3Robots = (function (_super) {
-    __extends(Stage3Robots, _super);
-    function Stage3Robots(props) {
-        var _this = _super.call(this, props) || this;
-        _this.state = {
-            has_records: false,
-            factory_second: _this.props.factory_second,
-            fetching: false
-        };
-        return _this;
-    }
-    Stage3Robots.prototype.componentWillReceiveProps = function (nextProps) {
-        if (nextProps.factory_second.length > 0) {
-            this.setState({
-                has_records: true,
-                factory_second: nextProps.factory_second
-            });
-        }
-        else {
-            this.setState({
-                has_records: false,
-                factory_second: []
-            });
-        }
-    };
-    Stage3Robots.prototype.render = function () {
-        if (this.state.has_records) {
-            return (React.createElement("div", null,
-                React.createElement(reactstrap_1.Container, { className: "robot-table" },
-                    React.createElement(reactstrap_1.Row, null,
-                        React.createElement(reactstrap_1.Col, null,
-                            React.createElement("h2", null, "Factory 2"))),
-                    React.createElement(reactstrap_1.Row, null,
-                        React.createElement(reactstrap_1.Col, null,
-                            React.createElement(reactstrap_2.Table, null,
-                                React.createElement("thead", null,
-                                    React.createElement("tr", null,
-                                        React.createElement("th", null, "Id"),
-                                        React.createElement("th", null, "Name"),
-                                        React.createElement("th", null, "Has sentience"),
-                                        React.createElement("th", null, "Has wheels"),
-                                        React.createElement("th", null, "Has tracks"),
-                                        React.createElement("th", null, "Number of rotors"),
-                                        React.createElement("th", null, "Color"))),
-                                React.createElement(RobotRecord_1.default, { robots: this.state.factory_second })))))));
-        }
-        else {
-            return (React.createElement("div", null,
-                React.createElement(reactstrap_1.Container, { className: "robot-table" },
-                    React.createElement(reactstrap_1.Row, null,
-                        React.createElement(reactstrap_1.Col, null,
-                            React.createElement("h2", null, "Factory 2"))),
-                    React.createElement(reactstrap_1.Row, null,
-                        React.createElement(reactstrap_1.Col, null,
-                            React.createElement(reactstrap_2.Table, null,
-                                React.createElement("thead", null,
-                                    React.createElement("tr", null,
-                                        React.createElement("th", null, "Id"),
-                                        React.createElement("th", null, "Name"),
-                                        React.createElement("th", null, "Has sentience"),
-                                        React.createElement("th", null, "Has wheels"),
-                                        React.createElement("th", null, "Has tracks"),
-                                        React.createElement("th", null, "Number of rotors"),
-                                        React.createElement("th", null, "Color"))),
-                                React.createElement("tbody", null,
-                                    React.createElement("tr", null,
-                                        React.createElement("td", null, "No records")))))))));
-        }
-    };
-    return Stage3Robots;
-}(React.Component));
-exports.default = Stage3Robots;
-
-
-/***/ }),
-/* 233 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = Object.setPrototypeOf ||
-        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-var React = __webpack_require__(7);
-var reactstrap_1 = __webpack_require__(14);
-var reactstrap_2 = __webpack_require__(14);
-__webpack_require__(27);
-__webpack_require__(28);
-var ShipmentRobots_1 = __webpack_require__(234);
-var Stage4Robots = (function (_super) {
-    __extends(Stage4Robots, _super);
-    function Stage4Robots(props) {
-        var _this = _super.call(this, props) || this;
-        _this.state = {
-            has_records: false,
-            ship: _this.props.ship,
-            fetching: false
-        };
-        return _this;
-    }
-    Stage4Robots.prototype.componentWillReceiveProps = function (nextProps) {
-        if (nextProps.ship.length > 0) {
-            this.setState({
-                has_records: true,
-                ship: nextProps.ship
-            });
-        }
-        else {
-            this.setState({
-                has_records: false,
-                ship: []
-            });
-        }
-    };
-    Stage4Robots.prototype.render = function () {
-        if (this.state.has_records) {
-            return (React.createElement("div", null,
-                React.createElement(reactstrap_1.Container, { className: "robot-table" },
-                    React.createElement(reactstrap_1.Row, null,
-                        React.createElement(reactstrap_1.Col, null,
-                            React.createElement("h2", null, "Factory QA"))),
-                    React.createElement(reactstrap_1.Row, null,
-                        React.createElement(reactstrap_1.Col, null,
-                            React.createElement(reactstrap_2.Table, null,
-                                React.createElement("thead", null,
-                                    React.createElement("tr", null,
-                                        React.createElement("th", null, "Id"),
-                                        React.createElement("th", null, "Name"),
-                                        React.createElement("th", null, "Has sentience"),
-                                        React.createElement("th", null, "Has wheels"),
-                                        React.createElement("th", null, "Has tracks"),
-                                        React.createElement("th", null, "Number of rotors"),
-                                        React.createElement("th", null, "Color"))),
-                                React.createElement(ShipmentRobots_1.default, { robots: this.state.ship })))))));
-        }
-        else {
-            return (React.createElement("div", null,
-                React.createElement(reactstrap_1.Container, { className: "robot-table" },
-                    React.createElement(reactstrap_1.Row, null,
-                        React.createElement(reactstrap_1.Col, null,
-                            React.createElement("h2", null, "Factory QA"))),
-                    React.createElement(reactstrap_1.Row, null,
-                        React.createElement(reactstrap_1.Col, null,
-                            React.createElement(reactstrap_2.Table, null,
-                                React.createElement("thead", null,
-                                    React.createElement("tr", null,
-                                        React.createElement("th", null, "Id"),
-                                        React.createElement("th", null, "Name"),
-                                        React.createElement("th", null, "Has sentience"),
-                                        React.createElement("th", null, "Has wheels"),
-                                        React.createElement("th", null, "Has tracks"),
-                                        React.createElement("th", null, "Number of rotors"),
-                                        React.createElement("th", null, "Color"))),
-                                React.createElement("tbody", null,
-                                    React.createElement("tr", null,
-                                        React.createElement("td", null, "No records")))))))));
-        }
-    };
-    return Stage4Robots;
-}(React.Component));
-exports.default = Stage4Robots;
-
-
-/***/ }),
-/* 234 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = Object.setPrototypeOf ||
-        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-var React = __webpack_require__(7);
-var reactstrap_1 = __webpack_require__(14);
-var ShipmentRobots = (function (_super) {
-    __extends(ShipmentRobots, _super);
-    function ShipmentRobots() {
-        return _super !== null && _super.apply(this, arguments) || this;
-    }
-    ShipmentRobots.prototype.render = function () {
+    ExtinguishRobotRecord.prototype.render = function () {
+        var _this = this;
         var robots = this.props.robots.map(function (robot) {
             return (React.createElement("tr", { key: robot.id },
                 React.createElement("td", null, robot.id),
@@ -32210,27 +31944,27 @@ var ShipmentRobots = (function (_super) {
                 React.createElement("td", null, robot.number_of_rotors),
                 React.createElement("td", null, robot.color),
                 React.createElement("td", null,
-                    React.createElement(reactstrap_1.Button, { color: "success" }, "Ship"))));
+                    React.createElement(reactstrap_1.Button, { onClick: function () { _this.extinguish(robot.id); }, color: _this.checkColorStatus(robot) }, _this.checkExtinguishedStatus(robot)))));
         });
         return (React.createElement("tbody", null, robots));
     };
-    return ShipmentRobots;
+    return ExtinguishRobotRecord;
 }(React.Component));
-exports.default = ShipmentRobots;
+exports.default = ExtinguishRobotRecord;
 
 
 /***/ }),
-/* 235 */
+/* 232 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
 Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
-/* WEBPACK VAR INJECTION */(function(process) {/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__createStore__ = __webpack_require__(97);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__combineReducers__ = __webpack_require__(248);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__bindActionCreators__ = __webpack_require__(249);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__applyMiddleware__ = __webpack_require__(250);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__compose__ = __webpack_require__(102);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_5__utils_warning__ = __webpack_require__(101);
+/* WEBPACK VAR INJECTION */(function(process) {/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__createStore__ = __webpack_require__(96);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__combineReducers__ = __webpack_require__(245);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__bindActionCreators__ = __webpack_require__(246);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__applyMiddleware__ = __webpack_require__(247);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__compose__ = __webpack_require__(101);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_5__utils_warning__ = __webpack_require__(100);
 /* harmony reexport (binding) */ __webpack_require__.d(__webpack_exports__, "createStore", function() { return __WEBPACK_IMPORTED_MODULE_0__createStore__["b"]; });
 /* harmony reexport (binding) */ __webpack_require__.d(__webpack_exports__, "combineReducers", function() { return __WEBPACK_IMPORTED_MODULE_1__combineReducers__["a"]; });
 /* harmony reexport (binding) */ __webpack_require__.d(__webpack_exports__, "bindActionCreators", function() { return __WEBPACK_IMPORTED_MODULE_2__bindActionCreators__["a"]; });
@@ -32257,13 +31991,13 @@ if (process.env.NODE_ENV !== 'production' && typeof isCrushed.name === 'string' 
 /* WEBPACK VAR INJECTION */}.call(__webpack_exports__, __webpack_require__(0)))
 
 /***/ }),
-/* 236 */
+/* 233 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__Symbol_js__ = __webpack_require__(99);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__getRawTag_js__ = __webpack_require__(239);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__objectToString_js__ = __webpack_require__(240);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__Symbol_js__ = __webpack_require__(98);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__getRawTag_js__ = __webpack_require__(236);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__objectToString_js__ = __webpack_require__(237);
 
 
 
@@ -32295,11 +32029,11 @@ function baseGetTag(value) {
 
 
 /***/ }),
-/* 237 */
+/* 234 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__freeGlobal_js__ = __webpack_require__(238);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__freeGlobal_js__ = __webpack_require__(235);
 
 
 /** Detect free variable `self`. */
@@ -32312,7 +32046,7 @@ var root = __WEBPACK_IMPORTED_MODULE_0__freeGlobal_js__["a" /* default */] || fr
 
 
 /***/ }),
-/* 238 */
+/* 235 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -32321,14 +32055,14 @@ var freeGlobal = typeof global == 'object' && global && global.Object === Object
 
 /* harmony default export */ __webpack_exports__["a"] = (freeGlobal);
 
-/* WEBPACK VAR INJECTION */}.call(__webpack_exports__, __webpack_require__(100)))
+/* WEBPACK VAR INJECTION */}.call(__webpack_exports__, __webpack_require__(99)))
 
 /***/ }),
-/* 239 */
+/* 236 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__Symbol_js__ = __webpack_require__(99);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__Symbol_js__ = __webpack_require__(98);
 
 
 /** Used for built-in method references. */
@@ -32378,7 +32112,7 @@ function getRawTag(value) {
 
 
 /***/ }),
-/* 240 */
+/* 237 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -32407,11 +32141,11 @@ function objectToString(value) {
 
 
 /***/ }),
-/* 241 */
+/* 238 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__overArg_js__ = __webpack_require__(242);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__overArg_js__ = __webpack_require__(239);
 
 
 /** Built-in value references. */
@@ -32421,7 +32155,7 @@ var getPrototype = Object(__WEBPACK_IMPORTED_MODULE_0__overArg_js__["a" /* defau
 
 
 /***/ }),
-/* 242 */
+/* 239 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -32443,7 +32177,7 @@ function overArg(func, transform) {
 
 
 /***/ }),
-/* 243 */
+/* 240 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -32479,14 +32213,14 @@ function isObjectLike(value) {
 
 
 /***/ }),
-/* 244 */
+/* 241 */
 /***/ (function(module, exports, __webpack_require__) {
 
-module.exports = __webpack_require__(245);
+module.exports = __webpack_require__(242);
 
 
 /***/ }),
-/* 245 */
+/* 242 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -32496,7 +32230,7 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 
-var _ponyfill = __webpack_require__(247);
+var _ponyfill = __webpack_require__(244);
 
 var _ponyfill2 = _interopRequireDefault(_ponyfill);
 
@@ -32519,10 +32253,10 @@ if (typeof self !== 'undefined') {
 
 var result = (0, _ponyfill2['default'])(root);
 exports['default'] = result;
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(100), __webpack_require__(246)(module)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(99), __webpack_require__(243)(module)))
 
 /***/ }),
-/* 246 */
+/* 243 */
 /***/ (function(module, exports) {
 
 module.exports = function(module) {
@@ -32550,7 +32284,7 @@ module.exports = function(module) {
 
 
 /***/ }),
-/* 247 */
+/* 244 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -32579,14 +32313,14 @@ function symbolObservablePonyfill(root) {
 };
 
 /***/ }),
-/* 248 */
+/* 245 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
 /* WEBPACK VAR INJECTION */(function(process) {/* harmony export (immutable) */ __webpack_exports__["a"] = combineReducers;
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__createStore__ = __webpack_require__(97);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_lodash_es_isPlainObject__ = __webpack_require__(98);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__utils_warning__ = __webpack_require__(101);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__createStore__ = __webpack_require__(96);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_lodash_es_isPlainObject__ = __webpack_require__(97);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__utils_warning__ = __webpack_require__(100);
 
 
 
@@ -32720,7 +32454,7 @@ function combineReducers(reducers) {
 /* WEBPACK VAR INJECTION */}.call(__webpack_exports__, __webpack_require__(0)))
 
 /***/ }),
-/* 249 */
+/* 246 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -32774,12 +32508,12 @@ function bindActionCreators(actionCreators, dispatch) {
 }
 
 /***/ }),
-/* 250 */
+/* 247 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
 /* harmony export (immutable) */ __webpack_exports__["a"] = applyMiddleware;
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__compose__ = __webpack_require__(102);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__compose__ = __webpack_require__(101);
 var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
 
 
@@ -32830,13 +32564,13 @@ function applyMiddleware() {
 }
 
 /***/ }),
-/* 251 */
+/* 248 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", { value: true });
-var ApplicationActions_1 = __webpack_require__(252);
+var ApplicationActions_1 = __webpack_require__(249);
 var reducer = function (state, action) {
     if (state === void 0) { state = {}; }
     var changedState = state;
@@ -32850,8 +32584,14 @@ var reducer = function (state, action) {
             console.log("DISPLAY ROBOTS called");
             return action.payload;
         }
-        case 'PERFORM_QA': {
-            console.log("PERFORM QA called");
+        case 'EXTINGUISH_ROBOT': {
+            console.log("Extinguish robot called");
+            changedState = ApplicationActions_1.extinguishRobot(action.payload.id);
+            return changedState;
+        }
+        case 'SHIP_ROBOT': {
+            console.log("Ship robot called");
+            changedState = ApplicationActions_1.shipRobot(action.payload.id);
             return changedState;
         }
     }
@@ -32860,14 +32600,14 @@ exports.default = reducer;
 
 
 /***/ }),
-/* 252 */
+/* 249 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", { value: true });
-var axios_1 = __webpack_require__(253);
-var ApplicationStore_1 = __webpack_require__(96);
+var axios_1 = __webpack_require__(250);
+var ApplicationStore_1 = __webpack_require__(38);
 exports.fetchRobots = function () {
     var changedState = {};
     axios_1.default.get('http://localhost:3000/robots.json')
@@ -32880,24 +32620,48 @@ exports.fetchRobots = function () {
     });
     return changedState;
 };
+exports.shipRobot = function (id) {
+    var changedState = {};
+    axios_1.default.post('http://localhost:3000/robots/' + id + '/ship.json')
+        .then(function (response) {
+        ApplicationStore_1.default.dispatch({ type: "FETCH_ROBOTS" });
+        ApplicationStore_1.default.dispatch({ type: "DISPLAY_ROBOTS", payload: changedState });
+    })
+        .catch(function (error) {
+        changedState = {};
+    });
+    return changedState;
+};
+exports.extinguishRobot = function (id) {
+    var changedState = {};
+    axios_1.default.post('http://localhost:3000/robots/' + id + '/extinguish.json')
+        .then(function (response) {
+        ApplicationStore_1.default.dispatch({ type: "FETCH_ROBOTS" });
+        ApplicationStore_1.default.dispatch({ type: "DISPLAY_ROBOTS", payload: changedState });
+    })
+        .catch(function (error) {
+        changedState = {};
+    });
+    return changedState;
+};
 
 
 /***/ }),
-/* 253 */
+/* 250 */
 /***/ (function(module, exports, __webpack_require__) {
 
-module.exports = __webpack_require__(254);
+module.exports = __webpack_require__(251);
 
 /***/ }),
-/* 254 */
+/* 251 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 
 var utils = __webpack_require__(11);
-var bind = __webpack_require__(103);
-var Axios = __webpack_require__(256);
+var bind = __webpack_require__(102);
+var Axios = __webpack_require__(253);
 var defaults = __webpack_require__(58);
 
 /**
@@ -32931,15 +32695,15 @@ axios.create = function create(instanceConfig) {
 };
 
 // Expose Cancel & CancelToken
-axios.Cancel = __webpack_require__(107);
-axios.CancelToken = __webpack_require__(270);
-axios.isCancel = __webpack_require__(106);
+axios.Cancel = __webpack_require__(106);
+axios.CancelToken = __webpack_require__(267);
+axios.isCancel = __webpack_require__(105);
 
 // Expose all/spread
 axios.all = function all(promises) {
   return Promise.all(promises);
 };
-axios.spread = __webpack_require__(271);
+axios.spread = __webpack_require__(268);
 
 module.exports = axios;
 
@@ -32948,7 +32712,7 @@ module.exports.default = axios;
 
 
 /***/ }),
-/* 255 */
+/* 252 */
 /***/ (function(module, exports) {
 
 /*!
@@ -32975,7 +32739,7 @@ function isSlowBuffer (obj) {
 
 
 /***/ }),
-/* 256 */
+/* 253 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -32983,10 +32747,10 @@ function isSlowBuffer (obj) {
 
 var defaults = __webpack_require__(58);
 var utils = __webpack_require__(11);
-var InterceptorManager = __webpack_require__(265);
-var dispatchRequest = __webpack_require__(266);
-var isAbsoluteURL = __webpack_require__(268);
-var combineURLs = __webpack_require__(269);
+var InterceptorManager = __webpack_require__(262);
+var dispatchRequest = __webpack_require__(263);
+var isAbsoluteURL = __webpack_require__(265);
+var combineURLs = __webpack_require__(266);
 
 /**
  * Create a new instance of Axios
@@ -33068,7 +32832,7 @@ module.exports = Axios;
 
 
 /***/ }),
-/* 257 */
+/* 254 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -33087,13 +32851,13 @@ module.exports = function normalizeHeaderName(headers, normalizedName) {
 
 
 /***/ }),
-/* 258 */
+/* 255 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 
-var createError = __webpack_require__(105);
+var createError = __webpack_require__(104);
 
 /**
  * Resolve or reject a Promise based on response status.
@@ -33120,7 +32884,7 @@ module.exports = function settle(resolve, reject, response) {
 
 
 /***/ }),
-/* 259 */
+/* 256 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -33148,7 +32912,7 @@ module.exports = function enhanceError(error, config, code, request, response) {
 
 
 /***/ }),
-/* 260 */
+/* 257 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -33223,7 +32987,7 @@ module.exports = function buildURL(url, params, paramsSerializer) {
 
 
 /***/ }),
-/* 261 */
+/* 258 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -33267,7 +33031,7 @@ module.exports = function parseHeaders(headers) {
 
 
 /***/ }),
-/* 262 */
+/* 259 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -33342,7 +33106,7 @@ module.exports = (
 
 
 /***/ }),
-/* 263 */
+/* 260 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -33385,7 +33149,7 @@ module.exports = btoa;
 
 
 /***/ }),
-/* 264 */
+/* 261 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -33445,7 +33209,7 @@ module.exports = (
 
 
 /***/ }),
-/* 265 */
+/* 262 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -33504,15 +33268,15 @@ module.exports = InterceptorManager;
 
 
 /***/ }),
-/* 266 */
+/* 263 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 
 var utils = __webpack_require__(11);
-var transformData = __webpack_require__(267);
-var isCancel = __webpack_require__(106);
+var transformData = __webpack_require__(264);
+var isCancel = __webpack_require__(105);
 var defaults = __webpack_require__(58);
 
 /**
@@ -33590,7 +33354,7 @@ module.exports = function dispatchRequest(config) {
 
 
 /***/ }),
-/* 267 */
+/* 264 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -33617,7 +33381,7 @@ module.exports = function transformData(data, headers, fns) {
 
 
 /***/ }),
-/* 268 */
+/* 265 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -33638,7 +33402,7 @@ module.exports = function isAbsoluteURL(url) {
 
 
 /***/ }),
-/* 269 */
+/* 266 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -33659,13 +33423,13 @@ module.exports = function combineURLs(baseURL, relativeURL) {
 
 
 /***/ }),
-/* 270 */
+/* 267 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 
-var Cancel = __webpack_require__(107);
+var Cancel = __webpack_require__(106);
 
 /**
  * A `CancelToken` is an object that can be used to request cancellation of an operation.
@@ -33723,7 +33487,7 @@ module.exports = CancelToken;
 
 
 /***/ }),
-/* 271 */
+/* 268 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -33754,6 +33518,366 @@ module.exports = function spread(callback) {
     return callback.apply(null, arr);
   };
 };
+
+
+/***/ }),
+/* 269 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var React = __webpack_require__(7);
+var reactstrap_1 = __webpack_require__(12);
+var reactstrap_2 = __webpack_require__(12);
+__webpack_require__(27);
+__webpack_require__(28);
+var RobotRecord_1 = __webpack_require__(107);
+var Stage2Robots = (function (_super) {
+    __extends(Stage2Robots, _super);
+    function Stage2Robots(props) {
+        var _this = _super.call(this, props) || this;
+        _this.state = {
+            has_records: false,
+            recycle: _this.props.recycle,
+            fetching: false
+        };
+        return _this;
+    }
+    Stage2Robots.prototype.componentWillReceiveProps = function (nextProps) {
+        if (nextProps.recycle.length > 0) {
+            this.setState({
+                has_records: true,
+                recycle: nextProps.recycle
+            });
+        }
+        else {
+            this.setState({
+                has_records: false,
+                recycle: []
+            });
+        }
+    };
+    Stage2Robots.prototype.render = function () {
+        if (this.state.has_records) {
+            return (React.createElement("div", null,
+                React.createElement(reactstrap_1.Container, { className: "robot-table" },
+                    React.createElement(reactstrap_1.Row, null,
+                        React.createElement(reactstrap_1.Col, null,
+                            React.createElement("h2", null, "Robots need to be Recycled"))),
+                    React.createElement(reactstrap_1.Row, null,
+                        React.createElement(reactstrap_1.Col, null,
+                            React.createElement(reactstrap_2.Table, null,
+                                React.createElement("thead", null,
+                                    React.createElement("tr", null,
+                                        React.createElement("th", null, "Id"),
+                                        React.createElement("th", null, "Name"),
+                                        React.createElement("th", null, "Has sentience"),
+                                        React.createElement("th", null, "Has wheels"),
+                                        React.createElement("th", null, "Has tracks"),
+                                        React.createElement("th", null, "Number of rotors"),
+                                        React.createElement("th", null, "Color"))),
+                                React.createElement(RobotRecord_1.default, { robots: this.state.recycle })))))));
+        }
+        else {
+            return (React.createElement("div", null,
+                React.createElement(reactstrap_1.Container, { className: "robot-table" },
+                    React.createElement(reactstrap_1.Row, null,
+                        React.createElement(reactstrap_1.Col, null,
+                            React.createElement("h2", null, "Robots need to be recycled"))),
+                    React.createElement(reactstrap_1.Row, null,
+                        React.createElement(reactstrap_1.Col, null,
+                            React.createElement(reactstrap_2.Table, null,
+                                React.createElement("thead", null,
+                                    React.createElement("tr", null,
+                                        React.createElement("th", null, "Id"),
+                                        React.createElement("th", null, "Name"),
+                                        React.createElement("th", null, "Has sentience"),
+                                        React.createElement("th", null, "Has wheels"),
+                                        React.createElement("th", null, "Has tracks"),
+                                        React.createElement("th", null, "Number of rotors"),
+                                        React.createElement("th", null, "Color"))),
+                                React.createElement("tbody", null,
+                                    React.createElement("tr", null,
+                                        React.createElement("td", null, "No records")))))))));
+        }
+    };
+    return Stage2Robots;
+}(React.Component));
+exports.default = Stage2Robots;
+
+
+/***/ }),
+/* 270 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var React = __webpack_require__(7);
+var reactstrap_1 = __webpack_require__(12);
+var reactstrap_2 = __webpack_require__(12);
+__webpack_require__(27);
+__webpack_require__(28);
+var RobotRecord_1 = __webpack_require__(107);
+var Stage3Robots = (function (_super) {
+    __extends(Stage3Robots, _super);
+    function Stage3Robots(props) {
+        var _this = _super.call(this, props) || this;
+        _this.state = {
+            has_records: false,
+            factory_second: _this.props.factory_second,
+            fetching: false
+        };
+        return _this;
+    }
+    Stage3Robots.prototype.componentWillReceiveProps = function (nextProps) {
+        if (nextProps.factory_second.length > 0) {
+            this.setState({
+                has_records: true,
+                factory_second: nextProps.factory_second
+            });
+        }
+        else {
+            this.setState({
+                has_records: false,
+                factory_second: []
+            });
+        }
+    };
+    Stage3Robots.prototype.render = function () {
+        if (this.state.has_records) {
+            return (React.createElement("div", null,
+                React.createElement(reactstrap_1.Container, { className: "robot-table" },
+                    React.createElement(reactstrap_1.Row, null,
+                        React.createElement(reactstrap_1.Col, null,
+                            React.createElement("h2", null, "Factory 2"))),
+                    React.createElement(reactstrap_1.Row, null,
+                        React.createElement(reactstrap_1.Col, null,
+                            React.createElement(reactstrap_2.Table, null,
+                                React.createElement("thead", null,
+                                    React.createElement("tr", null,
+                                        React.createElement("th", null, "Id"),
+                                        React.createElement("th", null, "Name"),
+                                        React.createElement("th", null, "Has sentience"),
+                                        React.createElement("th", null, "Has wheels"),
+                                        React.createElement("th", null, "Has tracks"),
+                                        React.createElement("th", null, "Number of rotors"),
+                                        React.createElement("th", null, "Color"))),
+                                React.createElement(RobotRecord_1.default, { robots: this.state.factory_second })))))));
+        }
+        else {
+            return (React.createElement("div", null,
+                React.createElement(reactstrap_1.Container, { className: "robot-table" },
+                    React.createElement(reactstrap_1.Row, null,
+                        React.createElement(reactstrap_1.Col, null,
+                            React.createElement("h2", null, "Factory 2"))),
+                    React.createElement(reactstrap_1.Row, null,
+                        React.createElement(reactstrap_1.Col, null,
+                            React.createElement(reactstrap_2.Table, null,
+                                React.createElement("thead", null,
+                                    React.createElement("tr", null,
+                                        React.createElement("th", null, "Id"),
+                                        React.createElement("th", null, "Name"),
+                                        React.createElement("th", null, "Has sentience"),
+                                        React.createElement("th", null, "Has wheels"),
+                                        React.createElement("th", null, "Has tracks"),
+                                        React.createElement("th", null, "Number of rotors"),
+                                        React.createElement("th", null, "Color"))),
+                                React.createElement("tbody", null,
+                                    React.createElement("tr", null,
+                                        React.createElement("td", null, "No records")))))))));
+        }
+    };
+    return Stage3Robots;
+}(React.Component));
+exports.default = Stage3Robots;
+
+
+/***/ }),
+/* 271 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var React = __webpack_require__(7);
+var reactstrap_1 = __webpack_require__(12);
+var reactstrap_2 = __webpack_require__(12);
+__webpack_require__(27);
+__webpack_require__(28);
+var ShipmentRobots_1 = __webpack_require__(272);
+var Stage4Robots = (function (_super) {
+    __extends(Stage4Robots, _super);
+    function Stage4Robots(props) {
+        var _this = _super.call(this, props) || this;
+        _this.state = {
+            has_records: false,
+            ship: _this.props.ship,
+            fetching: false
+        };
+        return _this;
+    }
+    Stage4Robots.prototype.componentWillReceiveProps = function (nextProps) {
+        if (nextProps.ship.length > 0) {
+            this.setState({
+                has_records: true,
+                ship: nextProps.ship
+            });
+        }
+        else {
+            this.setState({
+                has_records: false,
+                ship: []
+            });
+        }
+    };
+    Stage4Robots.prototype.render = function () {
+        if (this.state.has_records) {
+            return (React.createElement("div", null,
+                React.createElement(reactstrap_1.Container, { className: "robot-table" },
+                    React.createElement(reactstrap_1.Row, null,
+                        React.createElement(reactstrap_1.Col, null,
+                            React.createElement("h2", null, "Factory QA"))),
+                    React.createElement(reactstrap_1.Row, null,
+                        React.createElement(reactstrap_1.Col, null,
+                            React.createElement(reactstrap_2.Table, null,
+                                React.createElement("thead", null,
+                                    React.createElement("tr", null,
+                                        React.createElement("th", null, "Id"),
+                                        React.createElement("th", null, "Name"),
+                                        React.createElement("th", null, "Has sentience"),
+                                        React.createElement("th", null, "Has wheels"),
+                                        React.createElement("th", null, "Has tracks"),
+                                        React.createElement("th", null, "Number of rotors"),
+                                        React.createElement("th", null, "Color"))),
+                                React.createElement(ShipmentRobots_1.default, { robots: this.state.ship })))))));
+        }
+        else {
+            return (React.createElement("div", null,
+                React.createElement(reactstrap_1.Container, { className: "robot-table" },
+                    React.createElement(reactstrap_1.Row, null,
+                        React.createElement(reactstrap_1.Col, null,
+                            React.createElement("h2", null, "Factory QA"))),
+                    React.createElement(reactstrap_1.Row, null,
+                        React.createElement(reactstrap_1.Col, null,
+                            React.createElement(reactstrap_2.Table, null,
+                                React.createElement("thead", null,
+                                    React.createElement("tr", null,
+                                        React.createElement("th", null, "Id"),
+                                        React.createElement("th", null, "Name"),
+                                        React.createElement("th", null, "Has sentience"),
+                                        React.createElement("th", null, "Has wheels"),
+                                        React.createElement("th", null, "Has tracks"),
+                                        React.createElement("th", null, "Number of rotors"),
+                                        React.createElement("th", null, "Color"))),
+                                React.createElement("tbody", null,
+                                    React.createElement("tr", null,
+                                        React.createElement("td", null, "No records")))))))));
+        }
+    };
+    return Stage4Robots;
+}(React.Component));
+exports.default = Stage4Robots;
+
+
+/***/ }),
+/* 272 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var React = __webpack_require__(7);
+var reactstrap_1 = __webpack_require__(12);
+var ApplicationStore_1 = __webpack_require__(38);
+var ShipmentRobots = (function (_super) {
+    __extends(ShipmentRobots, _super);
+    function ShipmentRobots(props) {
+        var _this = _super.call(this, props) || this;
+        _this.ship = _this.ship.bind(_this);
+        _this.checkColorStatus = _this.checkColorStatus.bind(_this);
+        _this.checkShippedStatus = _this.checkShippedStatus.bind(_this);
+        return _this;
+    }
+    ShipmentRobots.prototype.ship = function (id) {
+        ApplicationStore_1.default.dispatch({ type: "SHIP_ROBOT", payload: { id: id } });
+    };
+    ShipmentRobots.prototype.checkColorStatus = function (robot) {
+        if (robot.is_shipped) {
+            return "primary";
+        }
+        else {
+            return "info";
+        }
+    };
+    ShipmentRobots.prototype.checkShippedStatus = function (robot) {
+        if (robot.is_shipped) {
+            return "Shipped....";
+        }
+        else {
+            return "Ship";
+        }
+    };
+    ShipmentRobots.prototype.render = function () {
+        var _this = this;
+        var robots = this.props.robots.map(function (robot) {
+            return (React.createElement("tr", { key: robot.id },
+                React.createElement("td", null, robot.id),
+                React.createElement("td", null, robot.name),
+                React.createElement("td", null, "'" + robot.has_sentience + "'"),
+                React.createElement("td", null, "'" + robot.has_wheels + "'"),
+                React.createElement("td", null, "'" + robot.has_tracks + "'"),
+                React.createElement("td", null, robot.number_of_rotors),
+                React.createElement("td", null, robot.color),
+                React.createElement("td", null,
+                    React.createElement(reactstrap_1.Button, { onClick: function () { _this.ship(robot.id); }, color: _this.checkColorStatus(robot) }, _this.checkShippedStatus(robot)))));
+        });
+        return (React.createElement("tbody", null, robots));
+    };
+    return ShipmentRobots;
+}(React.Component));
+exports.default = ShipmentRobots;
 
 
 /***/ })

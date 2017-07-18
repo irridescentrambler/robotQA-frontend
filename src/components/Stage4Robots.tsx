@@ -18,7 +18,9 @@ interface Robot {
   on_fire: boolean,
   rusty: boolean,
   loose_screws: boolean,
-  paint_scratched: boolean
+  paint_scratched: boolean,
+  is_extinguished: boolean,
+  is_shipped: boolean
 }
 
 interface MyState {

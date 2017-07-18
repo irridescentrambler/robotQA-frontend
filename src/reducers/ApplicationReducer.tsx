@@ -1,5 +1,5 @@
 import axios from "axios";
-import { fetchRobots } from "../actions/ApplicationActions"
+import { fetchRobots, extinguishRobot, shipRobot } from "../actions/ApplicationActions"
 
 type Robot = {
   id?: number,
@@ -19,7 +19,8 @@ type MyState = {
   extinguish?: Robot[],
   recycle?: Robot[],
   factory_second?: Robot[],
-  ship?: Robot[]
+  ship?: Robot[],
+  id?: number
 }
 
 type Action = {
@@ -39,9 +40,15 @@ const reducer = function(state: MyState = { }, action: Action):MyState {
       console.log("DISPLAY ROBOTS called");
       return action.payload
     }
-    case 'SHIP_ORDER': {
-      console.log("SHIP ORDER called");
-      
+    case 'EXTINGUISH_ROBOT': {
+      console.log("Extinguish robot called");
+      changedState = extinguishRobot(action.payload.id);
+      return changedState;
+    }
+    case 'SHIP_ROBOT': {
+      console.log("Ship robot called");
+      changedState = shipRobot(action.payload.id);
+      return changedState;
     }
   }
 }
