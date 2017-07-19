@@ -1,15 +1,11 @@
 import * as React from "react";
 import { Collapse, Navbar, NavbarToggler, NavbarBrand, Nav, NavItem, NavLink } from 'reactstrap';
 
-type MyProps = {
-
-}
-
-type MyState = {
+interface MyState {
   isOpen: boolean
 }
 
-class Header extends React.Component<MyProps, MyState>{
+class Header extends React.Component<any, MyState>{
   constructor(props: MyState){
     super(props);
     this.toggle = this.toggle.bind(this);

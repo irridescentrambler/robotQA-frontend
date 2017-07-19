@@ -16443,7 +16443,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var React = __webpack_require__(7);
 var ReactDOM = __webpack_require__(41);
 var home_1 = __webpack_require__(208);
-console.log("Hello World");
 ReactDOM.render(React.createElement(home_1.default, null), document.getElementById("root"));
 
 
@@ -28790,7 +28789,7 @@ var reactstrap_1 = __webpack_require__(12);
 var reactstrap_2 = __webpack_require__(12);
 __webpack_require__(27);
 __webpack_require__(28);
-var ExtinguishRobotRecord_1 = __webpack_require__(231);
+var ExtinguishRobotRecords_1 = __webpack_require__(231);
 var Stage1Robots = (function (_super) {
     __extends(Stage1Robots, _super);
     function Stage1Robots(props) {
@@ -28835,7 +28834,7 @@ var Stage1Robots = (function (_super) {
                                         React.createElement("th", null, "Has tracks"),
                                         React.createElement("th", null, "Number of rotors"),
                                         React.createElement("th", null, "Color"))),
-                                React.createElement(ExtinguishRobotRecord_1.default, { robots: this.state.extinguish })))))));
+                                React.createElement(ExtinguishRobotRecords_1.default, { robots: this.state.extinguish })))))));
         }
         else {
             return (React.createElement("div", null,
@@ -31904,19 +31903,19 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var React = __webpack_require__(7);
 var reactstrap_1 = __webpack_require__(12);
 var ApplicationStore_1 = __webpack_require__(38);
-var ExtinguishRobotRecord = (function (_super) {
-    __extends(ExtinguishRobotRecord, _super);
-    function ExtinguishRobotRecord(props) {
+var ExtinguishRobotRecords = (function (_super) {
+    __extends(ExtinguishRobotRecords, _super);
+    function ExtinguishRobotRecords(props) {
         var _this = _super.call(this, props) || this;
         _this.extinguish = _this.extinguish.bind(_this);
         _this.checkColorStatus = _this.checkColorStatus.bind(_this);
         _this.checkExtinguishedStatus = _this.checkExtinguishedStatus.bind(_this);
         return _this;
     }
-    ExtinguishRobotRecord.prototype.extinguish = function (id) {
+    ExtinguishRobotRecords.prototype.extinguish = function (id) {
         ApplicationStore_1.default.dispatch({ type: "EXTINGUISH_ROBOT", payload: { id: id } });
     };
-    ExtinguishRobotRecord.prototype.checkColorStatus = function (robot) {
+    ExtinguishRobotRecords.prototype.checkColorStatus = function (robot) {
         if (robot.is_extinguished) {
             return "success";
         }
@@ -31924,7 +31923,7 @@ var ExtinguishRobotRecord = (function (_super) {
             return "danger";
         }
     };
-    ExtinguishRobotRecord.prototype.checkExtinguishedStatus = function (robot) {
+    ExtinguishRobotRecords.prototype.checkExtinguishedStatus = function (robot) {
         if (robot.is_extinguished) {
             return "Extinguished..";
         }
@@ -31932,7 +31931,7 @@ var ExtinguishRobotRecord = (function (_super) {
             return "Extinguish";
         }
     };
-    ExtinguishRobotRecord.prototype.render = function () {
+    ExtinguishRobotRecords.prototype.render = function () {
         var _this = this;
         var robots = this.props.robots.map(function (robot) {
             return (React.createElement("tr", { key: robot.id },
@@ -31948,9 +31947,9 @@ var ExtinguishRobotRecord = (function (_super) {
         });
         return (React.createElement("tbody", null, robots));
     };
-    return ExtinguishRobotRecord;
+    return ExtinguishRobotRecords;
 }(React.Component));
-exports.default = ExtinguishRobotRecord;
+exports.default = ExtinguishRobotRecords;
 
 
 /***/ }),
@@ -32576,21 +32575,17 @@ var reducer = function (state, action) {
     var changedState = state;
     switch (action.type) {
         case 'FETCH_ROBOTS': {
-            console.log("FETCH ROBOTS called");
             changedState = ApplicationActions_1.fetchRobots();
             return changedState;
         }
         case 'DISPLAY_ROBOTS': {
-            console.log("DISPLAY ROBOTS called");
             return action.payload;
         }
         case 'EXTINGUISH_ROBOT': {
-            console.log("Extinguish robot called");
             changedState = ApplicationActions_1.extinguishRobot(action.payload.id);
             return changedState;
         }
         case 'SHIP_ROBOT': {
-            console.log("Ship robot called");
             changedState = ApplicationActions_1.shipRobot(action.payload.id);
             return changedState;
         }
@@ -32608,39 +32603,45 @@ exports.default = reducer;
 Object.defineProperty(exports, "__esModule", { value: true });
 var axios_1 = __webpack_require__(250);
 var ApplicationStore_1 = __webpack_require__(38);
+var emptyState = {
+    extinguish: [],
+    recycle: [],
+    factory_second: [],
+    ship: []
+};
 exports.fetchRobots = function () {
-    var changedState = {};
+    var changedState = emptyState;
     axios_1.default.get('http://localhost:3000/robots.json')
         .then(function (response) {
         changedState = response.data;
         ApplicationStore_1.default.dispatch({ type: "DISPLAY_ROBOTS", payload: changedState });
     })
         .catch(function (error) {
-        changedState = {};
+        changedState = emptyState;
     });
     return changedState;
 };
 exports.shipRobot = function (id) {
-    var changedState = {};
+    var changedState = emptyState;
     axios_1.default.post('http://localhost:3000/robots/' + id + '/ship.json')
         .then(function (response) {
         ApplicationStore_1.default.dispatch({ type: "FETCH_ROBOTS" });
         ApplicationStore_1.default.dispatch({ type: "DISPLAY_ROBOTS", payload: changedState });
     })
         .catch(function (error) {
-        changedState = {};
+        changedState = emptyState;
     });
     return changedState;
 };
 exports.extinguishRobot = function (id) {
-    var changedState = {};
+    var changedState = emptyState;
     axios_1.default.post('http://localhost:3000/robots/' + id + '/extinguish.json')
         .then(function (response) {
         ApplicationStore_1.default.dispatch({ type: "FETCH_ROBOTS" });
         ApplicationStore_1.default.dispatch({ type: "DISPLAY_ROBOTS", payload: changedState });
     })
         .catch(function (error) {
-        changedState = {};
+        changedState = emptyState;
     });
     return changedState;
 };

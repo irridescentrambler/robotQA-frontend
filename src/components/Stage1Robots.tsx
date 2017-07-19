@@ -4,24 +4,9 @@ import { Table } from 'reactstrap';
 import 'bootstrap/dist/css/bootstrap.css';
 import { Button } from 'reactstrap';
 import '../../style/home.css';
-import ExtinguishRobotRecord from "./ExtinguishRobotRecord";
+import ExtinguishRobotRecords from "./ExtinguishRobotRecords";
 import store from "../stores/ApplicationStore";
-
-interface Robot {
-  id: number,
-  name: string,
-  has_sentience: boolean,
-  has_wheels: boolean,
-  has_tracks: boolean,
-  number_of_rotors: number,
-  color: string,
-  on_fire: boolean,
-  rusty: boolean,
-  loose_screws: boolean,
-  paint_scratched: boolean,
-  is_extinguished: boolean,
-  is_shipped: boolean
-}
+import Robot from "../interfaces/Robot";
 
 interface MyState {
   has_records: boolean,
@@ -82,7 +67,7 @@ class Stage1Robots extends React.Component<MyProps, MyState>{
                     <th>Color</th>
                   </tr>
                 </thead>
-                <ExtinguishRobotRecord robots = { this.state.extinguish } />
+                <ExtinguishRobotRecords robots = { this.state.extinguish } />
               </Table>
             </Col>
           </Row>

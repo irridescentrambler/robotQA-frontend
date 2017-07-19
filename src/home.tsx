@@ -4,7 +4,6 @@ import { Table } from 'reactstrap';
 import 'bootstrap/dist/css/bootstrap.css';
 import { Button } from 'reactstrap';
 import '../style/home.css';
-import RobotTable from './components/RobotTable';
 import store from "./stores/ApplicationStore"
 import RobotQA from "./components/RobotQA"
 

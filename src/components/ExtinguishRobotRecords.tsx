@@ -1,28 +1,10 @@
 import * as React from "react";
 import { Button } from "reactstrap";
-import store from "../stores/ApplicationStore"
+import store from "../stores/ApplicationStore";
+import Robot from "../interfaces/Robot";
+import MyProps from "../interfaces/TableProps";
 
-interface Robot {
-  id: number,
-  name: string,
-  has_sentience: boolean,
-  has_wheels: boolean,
-  has_tracks: boolean,
-  number_of_rotors: number,
-  color: string,
-  on_fire: boolean,
-  rusty: boolean,
-  loose_screws: boolean,
-  paint_scratched: boolean,
-  is_extinguished: boolean,
-  is_shipped: boolean
-}
-
-interface MyProps {
-  robots: Array<Robot>
-}
-
-class ExtinguishRobotRecord extends React.Component<MyProps, any>{
+class ExtinguishRobotRecords extends React.Component<MyProps, any>{
 
   constructor(props: MyProps){
     super(props);
@@ -31,6 +13,7 @@ class ExtinguishRobotRecord extends React.Component<MyProps, any>{
     this.checkExtinguishedStatus = this.checkExtinguishedStatus.bind(this);
   }
 
+  // extinguish a robot with id
   extinguish(id: number){
     store.dispatch({ type: "EXTINGUISH_ROBOT", payload: {id: id} })
   }
@@ -44,6 +27,7 @@ class ExtinguishRobotRecord extends React.Component<MyProps, any>{
     }
   }
 
+  // Checks whether the robot is extinguished or not
   checkExtinguishedStatus(robot: Robot): any{
     if(robot.is_extinguished){
       return "Extinguished.."
@@ -76,4 +60,4 @@ class ExtinguishRobotRecord extends React.Component<MyProps, any>{
   }
 }
 
-export default ExtinguishRobotRecord;
+export default ExtinguishRobotRecords;
